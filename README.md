@@ -1,7 +1,7 @@
-# Project_mHEC_CR2020
+# Embryonic endothelial evolution towards first hematopoietic stem cells revealed by single-cell transcriptomic and functional analyses
 R codes used to reproduce computational analysis results in CR2020.  https://www.nature.com/articles/s41422-020-0300-2
 
-##### Embryonic endothelial evolution towards first hematopoietic stem cells revealed by single-cell transcriptomic and functional analyses
+
 
 # Get Started
 Almost all R codes used in this project are included in `mHEC_CR2020.Rmd`, from which you can start.
