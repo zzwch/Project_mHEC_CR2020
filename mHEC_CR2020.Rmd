@@ -1,0 +1,2210 @@
+---   
+title: "190830_mHEC"
+author: "Zongcheng Li"
+date: "2019.8.30"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: 
+      collapsed: true
+      smooth_scroll: true
+    number_sections: true
+---  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 3, fig.width = 4, 
+                      message=FALSE, warning=FALSE,
+                      comment = "ZZ", cache = T, dev = "png",
+                      dpi = 150)
+```
+
+# Global settings
+```{r global, message=FALSE, warning=FALSE}
+options(stringsAsFactors = F)
+rm(list = ls())
+
+pal_light <- colorRampPalette(c("grey", RColorBrewer::brewer.pal(9, "YlOrRd")))(10)
+
+```
+
+
+## loading R packages
+```{r packages, message=FALSE, warning=FALSE}
+# R 3.4.3
+library(Seurat) # v2.3.4
+library(RColorBrewer)
+library(ggrepel)
+library(monocle) # v2.6.4
+library(pheatmap)
+library(gplots)
+library(WriteXLS)
+library(ggpubr)
+library(reshape2)
+library(cowplot)
+#library(WGCNA)
+library(plyr)
+library(ggnewscale) # install the development version with devtools::install_github("eliocamp/ggnewscale")
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(Mpath) # https://github.com/JinmiaoChenLab/Mpath
+library(ConsensusClusterPlus)
+library(GSVA)
+library(gage)
+library(dplyr)
+library(AnnotationDbi)
+```
+
+
+## introduce external gene lists
+```{r geneset}
+go_ccgenes <- readxl::read_excel("18821_2_data_set_242956_q5ff6r.xls", sheet = 6, skip = 1, col_names = F)[,1,drop = T]
+# supplementary table 7
+
+geneset <- list()
+geneset$induceTFs <- c( "Sox17",#"Pou5f1", 
+                       "Gata2", "Gfi1b", "Fos", "Etv6", "Erg","Lmo2", 
+                       "Hlf", "Pbx1", "Prdm5", "Runx1t1", "Zfp37", "Meis1", "Mycn", 
+                       "Fosb", "Gfi1", "Runx1", "Spi1", "Hoxb4", "Hoxa9", "Rora", "Sox4", "Myb", "Tal1", "Etv2",
+                       #Shahin Raffi
+                       "Hoxa10", "Hoxa5", "Lcor" # George Q. Daley
+                       )
+# cell cycle genes
+geneset$g1s <- c("Mcm5","Pcna","Tyms","Fen1","Mcm2","Mcm4","Rrm1","Ung","Gins2",
+                         "Mcm6","Cdca7","Dtl","Prim1","Uhrf1","Cenpu","Hells","Rfc2",
+                         "Rpa2","Nasp","Rad51ap1","Gmnn","Wdr76","Slbp","Ccne2","Ubr7",
+                         "Pold3","Msh2","Atad2","Rad51","Rrm2","Cdc45","Cdc6","Exo1",
+                         "Tipin","Dscc1","Blm","Casp8ap2","Usp1","Clspn","Pola1",
+                         "Chaf1b","Brip1","E2f8")
+geneset$g2m <- c("Hmgb2","Cdk1","Nusap1","Ube2c","Birc5","Tpx2","Top2a","Ndc80",
+                         "Cks2","Nuf2","Cks1b","Mki67","Tmpo","Cenpf","Tacc3","Fam64a",
+                         "Smc4","Ccnb2","Ckap2l","Ckap2","Aurkb","Bub1","Kif11","Anp32e",
+                         "Tubb4b","Gtse1","Kif20b","Hjurp","Cdca3","Hn1","Cdc20","Ttk",
+                         "Cdc25c","Kif2c","Rangap1","Ncapd2","Dlgap5","Cdca2","Cdca8",
+                         "Ect2","Kif23","Hmmr","Aurka","Psrc1","Anln","Lbr","Ckap5",
+                         "Cenpe","Ctcf","Nek2","G2e3","Gas2l3","Cbx5","Cenpa")
+
+geneset$tf_mmu <- readxl::read_excel("18821_2_data_set_242956_q5ff6r.xls", sheet = 4, skip = 1, col_names = T)[,3,drop = T]
+geneset$sp_mmu <- readxl::read_excel(path = "18821_2_data_set_242956_q5ff6r.xls", sheet = 3, col_names = T)[,1,drop=T]
+
+geneset$pre_signature <- c("2410004N09Rik", "9030617O03Rik", "9030619P08Rik", "Ablim1", "Acot11", "Akr1c14", "Angpt1", "Ank", "Anpep", "Art4", "Bcl11a", "Bmx", "Calcrl", "Camsap3", "Car2", "Cd27", "Chad", "Clu", "Crebrf", "Ctnnal1", "Cyp26b1", "Dnah11", "Dnmt3b", "Efcc1", "Eya2", "Fam120c", "Fam181b", "Fam84b", "Fgfr3", "Gabarapl1", "Gck", "Gcnt2", "Gfi1", "Gm16548", "Gpr56", "Grasp", "Hif3a", "Hlf", "Ikzf2", "Irf2", "Itgb3", "Kcnn4", "Lama5", "Lgals3bp", "Mamdc2", "Marveld1", "Mctp1", "Meis1", "Mfsd6", "Mllt3", "Mpl", "Msi2", "Mycn", "Neurl3", "Nfix", "Nkx2-3", "Nrgn", "Ocln", "Olfr632", "Pdcd4", "Pde9a", "Pdlim1", "Pdzk1ip1", "Pglyrp2", "Pik3c2b", "Procr", "Ptgis", "Rab38", "Rps6ka5", "Selp", "Serpina3g", "Serpinb6b", "Serpinf1", "Setbp1", "Slc18a2", "Slc22a4", "Slc25a23", "Slc26a11", "Slco3a1", "Snhg7", "Spns2", "St3gal1", "Stat4", "Tal1", "Tbkbp1", "Timp2", "Tmem176b", "Tmem246", "Tmem26", "Trim47", "Trim6", "Vdr", "Vipr1", "Vipr2", "Vwf", "Wdfy1", "Xk", "Znf512b")
+
+geneset$cytokine_growthfactor <- c("ADIPOQ", "ADM", "ADM2", "AGRP", "AGT", "AIMP1", "AMBN", "AMELX", "AMH", "ANGPTL5", "ANGPTL7", "APLN", "AREG", "ARTN", "AVP", "AZU1", "BDNF", "BMP1", "BMP10", "BMP15", "BMP2", "BMP3", "BMP4", "BMP5", "BMP6", "BMP7", "BMP8A", "BMP8B", "BTC", "C19orf10", "C3", "C5", "CALCA", "CALCB", "CAMP", "CAT", "CCK", "CCL1", "CCL11", "CCL13", "CCL14", "CCL14-CCL15", "CCL15", "CCL16", "CCL17", "CCL18", "CCL19", "CCL2", "CCL20", "CCL21", "CCL22", "CCL23", "CCL24", "CCL25", "CCL26", "CCL27", "CCL28", "CCL3", "CCL3L1", "CCL3L3", "CCL4", "CCL4L1", "CCL4L2", "CCL5", "CCL7", "CCL8", "CD320", "CD40LG", "CD70", "CDNF", "CECR1", "CER1", "CGA", "CGB", "CGB1", "CGB2", "CGB5", "CGB7", "CGB8", "CHGA", "CHGB", "CKLF", "CLCF1", "CLEC11A", "CMA1", "CMTM1", "CMTM2", "CMTM3", "CMTM4", "CMTM5", "CMTM6", "CMTM7", "CMTM8", "CNTF", "CORT", "CRH", "CSF1", "CSF2", "CSF3", "CSH1", "CSH2", "CSHL1", "CSPG5", "CTF1", "CTGF", "CTSG", "CX3CL1", "CXCL1", "CXCL10", "CXCL11", "CXCL12", "CXCL13", "CXCL14", "CXCL16", "CXCL17", "CXCL2", "CXCL3", "CXCL5", "CXCL6", "CXCL9", "CYR61", "DEFA1", "DEFA3", "DEFA5", "DEFB1", "DEFB103B", "DEFB104A", "DEFB4A", "DKK1", "EBI3", "EDN1", "EDN2", "EDN3", "EGF", "ENDOU", "EPGN", "EPO", "EREG", "ESM1", "FAM3B", "FAM3C", "FAM3D", "FASLG", "FGF1", "FGF10", "FGF11", "FGF12", "FGF13", "FGF14", "FGF16", "FGF17", "FGF18", "FGF19", "FGF2", "FGF20", "FGF21", "FGF22", "FGF23", "FGF3", "FGF4", "FGF5", "FGF6", "FGF7", "FGF8", "FGF9", "FIGF", "FLT3LG", "FSHB", "GAL", "GALP", "GAST", "GCG", "GDF1", "GDF10", "GDF11", "GDF15", "GDF2", "GDF3", "GDF5", "GDF6", "GDF7", "GDF9", "GDNF", "GH1", "GH2", "GHRH", "GHRL", "GIP", "GKN1", "GMFB", "GMFG", "GNRH1", "GNRH2", "GPHA2", "GPHB5", "GPI", "GREM1", "GREM2", "GRN", "GRP", "GUCA2A", "HAMP", "HBEGF", "HDGF", "HDGFRP3", "HGF", "HTN3", "IAPP", "IFNA1", "IFNA10", "IFNA13", "IFNA14", "IFNA16", "IFNA17", "IFNA2", "IFNA21", "IFNA4", "IFNA5", "IFNA6", "IFNA7", "IFNA8", "IFNB1", "IFNG", "IFNK", "IFNW1", "IGF1", "IGF2", "IL10", "IL11", "IL12A", "IL12B", "IL13", "IL15", "IL16", "IL17A", "IL17B", "IL17C", "IL17D", "IL17F", "IL18", "IL19", "IL1A", "IL1B", "IL1F10", "IL1RN", "IL2", "IL20", "IL21", "IL22", "IL23A", "IL24", "IL25", "IL26", "IL27", "IL28A", "IL28B", "IL29", "IL3", "IL31", "IL32", "IL33", "IL34", "IL36A", "IL36B", "IL36G", "IL36RN", "IL37", "IL4", "IL5", "IL6", "IL6ST", "IL7", "IL8", "IL9", "INHA", "INHBA", "INHBB", "INHBC", "INHBE", "INS", "INS-IGF2", "INSL3", "INSL4", "INSL5", "INSL6", "JAG1", "JAG2", "KGFLP1", "KGFLP2", "KITLG", "KL", "LACRT", "LECT2", "LEFTY1", "LEFTY2", "LEP", "LHB", "LIF", "LRSAM1", "LTA", "LTB", "LTBP1", "LTBP2", "LTBP3", "LTBP4", "MANF", "MDK", "MIA", "MIF", "MLN", "MSTN", "NAMPT", "NDP", "NENF", "NGF", "NMB", "NODAL", "NOV", "NPFF", "NPPA", "NPPB", "NPPC", "NPY", "NRG1", "NRG2", "NRG3", "NRG4", "NRTN", "NTF3", "NTF4", "NTS", "NUDT6", "OGN", "OSGIN1", "OSM", "OSTN", "OXT", "PDGFA", "PDGFB", "PDGFC", "PDGFD", "PDGFRA", "PDGFRB", "PDGFRL", "PDYN", "PENK", "PF4", "PF4V1", "PGF", "PLAU", "PMCH", "PNOC", "POMC", "PPBP", "PPBPL1", "PPBPL2", "PPY", "PRL", "PRLH", "PROK1", "PROK2", "PSPN", "PTH", "PTH2", "PTHLH", "PTN", "PYY", "QRFP", "RABEP1", "RABEP2", "REG1A", "RETN", "RETNLB", "RLN1", "RLN2", "RLN3", "RNASE2", "S100A6", "SAA1", "SAA2", "SBDS", "SCG2", "SCGB3A1", "SCT", "SECTM1", "SEMA3A", "SEMA3B", "SEMA3C", "SEMA3D", "SEMA3E", "SEMA3F", "SEMA3G", "SEMA4A", "SEMA4B", "SEMA4C", "SEMA4D", "SEMA4F", "SEMA4G", "SEMA5A", "SEMA5B", "SEMA6A", "SEMA6B", "SEMA6C", "SEMA6D", "SEMA7A", "SLIT1", "SLIT2", "SLURP1", "SPP1", "SST", "STC1", "STC2", "TAC1", "TDGF1", "TG", "TGFA", "TGFB1", "TGFB2", "TGFB3", "THPO", "TNC", "TNF", "TNFRSF11B", "TNFSF10", "TNFSF11", "TNFSF12", "TNFSF13", "TNFSF13B", "TNFSF14", "TNFSF15", "TNFSF18", "TNFSF4", "TNFSF8", "TNFSF9", "TOR2A", "TRH", "TSHB", "TSLP", "TXLNA", "TYMP", "UCN", "UCN2", "UCN3", "UTS2", "UTS2D", "VEGFA", "VEGFB", "VEGFC", "VGF", "VIP", "XCL1", "XCL2")
+geneset$cytokine_growthfactor <- na.omit(plyr::mapvalues(geneset$cytokine_growthfactor, 
+                                                 c("C19orf10", "CCL14-CCL15", "IL28A", "IL28B","IL29","IL8","PPBPL1", "PPBPL2","UTS2D"),
+                                                 c("MYDGF", NA, "IFNL2", "IFNL3", "IFNL1", "CXCL8", "PPBPP1", "PPBPP2", "UTS2B")))
+
+geneset$artery_feature <- c("Gja4", "Unc5b", "Mecom", "Hey1", "Efnb2", "Dll4", "Vegfc", "Epas1", "Cxcr4", "Igfbp3")
+geneset$venous_feature <- c("Nr2f2", "Aplnr", "Nrp2")
+```
+
+## custom functions
+```{r functions}
+sample_cluster_cells <- function(cells, clusters, n = 60, seed = 666){
+  cl <- unique(clusters)
+  set.seed(seed)
+  lapply(cl, function(x){
+    if(n >= sum(clusters == x)) return(cells[clusters == x])
+    sample(cells[clusters == x], size = n, replace = F)
+  })
+}
+
+robustAVScale <- function(x, probs = 0.95, max = 10, min = 0){
+  rMax <- quantile(x, probs = probs)
+  x[x>rMax] <- rMax
+  max*(x - min)/rMax
+}
+FindAllGSVA <- function(gsva.res, cluster.info, test = "wilcox", p.value.adj = 0.05, restrict.adjust = T, only.pos = F){
+  ret <- NULL
+  for(i in sort(unique(cluster.info))){
+    res <- FindGSVA(gsva.res, cluster.info, i, NULL, test)
+    ret <- rbind(ret, res)
+  }
+  if(restrict.adjust){
+    ret$p_val_adj <- p.adjust(ret$p_val, method = "BH")
+  }
+  ret <- subset(ret, p_val_adj < p.value.adj)
+  if(only.pos){
+    ret <- subset(ret, avg_Diff > 0)
+  }
+  return(ret)
+}
+FindGSVA <- function(gsva.res, cluster.info, cluster.1, cluster.2 = NULL, test = "wilcox"){
+  x_ind <- which(cluster.info %in% cluster.1)
+  if(is.null(cluster.2)){
+    y_ind <- which(!cluster.info %in% cluster.1)
+  }else{
+    y_ind <- which(cluster.info %in% cluster.2)
+  }
+  ret <- matrix(NA, nrow = nrow(gsva.res), 6)
+  colnames(ret) <- c("statistic","p_val", "avg_Diff", "p_val_adj", "cluster", "geneset")
+  ret <- as.data.frame(ret)
+  for(i in 1:nrow(gsva.res)){
+    xx <- as.numeric(gsva.res[i, x_ind])
+    yy <- as.numeric(gsva.res[i, y_ind])
+    if(test == "wilcox"){
+      res <- wilcox.test(xx, yy)
+    }
+    ret[i,] <- c(res$statistic, res$p.value, mean(xx)-mean(yy), NA, cluster.1, rownames(gsva.res)[i])
+  }
+  ret$statistic <- as.numeric(ret$statistic)
+  ret$p_val <- as.numeric(ret$p_val)
+  ret$avg_Diff <- as.numeric(ret$avg_Diff)
+  ret$p_val_adj <- p.adjust(ret$p_val, method = "BH")
+  return(ret)
+}
+corClassifier <- function(data, class, new_data, bycol = F){
+  if(!bycol){
+    data <- t(data)
+    new_data <- t(new_data)
+  }
+  corData <- cor(cbind(data, new_data))[colnames(data), colnames(new_data)]
+  corClass <- apply(corData, 2, function(x){tapply(x, list(class), mean)})
+  new_class <- rownames(corClass)[apply(corClass, 2, which.max)]
+  return(new_class)
+}
+plotBranchDiagram <- function(pattern_strings, comparisons, levels){ # support for 3 levels only
+  diagram <- as.data.frame(matrix(NA, 
+                                  nrow = length(pattern_strings), 
+                                  ncol = length(levels), 
+                                  dimnames = list(paste0('P', 1:length(pattern_strings)), 
+                                                  levels)
+                                  ))
+  diagram[,levels[1]] <- 0
+  for(i in 1:length(pattern_strings)){
+      pattern <- as.numeric(strsplit(pattern_strings[i], "_")[[1]])
+      for(j in levels[-1]){
+        diagram[i, j] <- pattern[match(paste0(j,"-",levels[1]), comparisons)] + diagram[i, levels[1]]
+      }
+      tmp <- pattern[match(paste0(levels[3], "-", levels[2]), comparisons)]
+      tmp1 <- tmp + diagram[i, levels[2]]
+  }
+}
+
+rowSmooth <- function(mat, n = NULL, proportion = 0.2, do.scale = F){
+  if(is.null(n)){
+    n <- ceiling(ncol(mat) * proportion)
+  }
+  if(n == 1) stop("nothing should be smoothed!")
+  res <- mat
+  for(i in 1:nrow(mat)){
+    res[i,] <- vectorSmooth(as.numeric(mat[i,,drop = T]), n)
+  }
+  
+  if(do.scale){
+    res <- t(scale(t(res)))
+  }
+  return(res)
+}
+vectorSmooth <- function(x, n){
+  sapply(1:length(x), function(i){
+    m <- 1:n + i - ceiling(n/2)
+    m <- m[m > 0 & m <= length(x)]
+    mean(x[m])
+  })
+}
+degsToMeatascape <- function(degs, txt, topn = NULL){
+  clusters <- sort(unique(degs$cluster))
+  txtfile = file(description = txt, open = "wt")
+  writeLines(text = "#Cluster\tGene", con = txtfile)
+  for(i in clusters){
+    if(is.null(topn)){
+      txtLine <- paste0(i, "\t", paste0(degs$gene[degs$cluster == i], collapse = ","))
+    }else if(topn > 0){
+      txtLine <- paste0(i, "\t", paste0(degs$gene[degs$cluster == i][1:round(topn)], collapse = ","))
+    }
+    writeLines(text = txtLine, con = txtfile)
+  }
+  close(txtfile)
+}
+genesToMeatascape <- function(gene,cluster, txt, topn = NULL){
+  clusters <- sort(unique(cluster))
+  txtfile = file(description = txt, open = "wt")
+  writeLines(text = "#Cluster\tGene", con = txtfile)
+  for(i in clusters){
+    if(is.null(topn)){
+      txtLine <- paste0(i, "\t", paste0(gene[cluster == i], collapse = ","))
+    }else if(topn > 0){
+      txtLine <- paste0(i, "\t", paste0(gene[cluster == i][1:round(topn)], collapse = ","))
+    }
+    writeLines(text = txtLine, con = txtfile)
+  }
+  close(txtfile)
+}
+
+goBarPlot <- function(ego, showCategory = 10, limits = NULL, title = NULL, title.size = 12){
+  ggData <- ego@result[1:10,]
+  ggData$Description <- factor(ggData$Description, levels = rev(ggData$Description))
+  ggplot(ggData) +
+    geom_bar(mapping = aes(Description,-log10(pvalue), fill = -log10(pvalue)), stat = "identity", show.legend = F) +
+    scale_fill_gradientn(colours = c("white","orange", "brown"), limits=limits) +
+    labs(title=title, x = NULL) +
+    coord_flip() + theme(plot.title = element_text(size = title.size))
+}
+
+
+
+identifyPatternGenes <- function(data, cluster, fc_th = 1.5){
+  genes.ave <- t(apply(data, 1, function(x){tapply(x, list(as.character(cluster)), function(y){log2(mean(2^y))})}))
+  genes.aov <- t(apply(data, 1, function(x){
+    tmp <- aov(expression ~ cluster, data.frame(Cluster = cluster, expression = x))
+    tmp1 <- TukeyHSD(tmp, ordered = F)
+    c(sign(tmp1$cluster[,"diff"]) * (tmp1$cluster[,"p adj"] < 0.05 & abs(tmp1$cluster[,"diff"]) > log2(fc_th)), 
+      aov.pvalue = summary(tmp)[[1]][1,"Pr(>F)"])
+    }))
+  
+  return(cbind(data.frame(gene = rownames(data), 
+                          max_mean = apply(genes.ave, 1, max), 
+                          row.names = rownames(data)),
+               genes.ave,
+               genes.aov,
+               aov.padj = p.adjust(genes.aov[,"aov.pvalue"], method = 'BH')))
+}
+
+AddCCscore <- function(ep, th.g1s = 2, th.g2m = 2, 
+                       g1s.genes, g2m.genes,
+                       gene.max = NULL, add.dr.ccscore = F, use.scale = F){
+  
+  g1s.genes <- intersect(g1s.genes, rownames(ep@data))
+  g2m.genes <- intersect(g2m.genes, rownames(ep@data))
+  
+  use.data <- if(use.scale) ep@scale.data else ep@data
+  use.data <- use.data[c(g1s.genes,g2m.genes),]
+  use.data <- if(is.null(gene.max)) use.data else t(apply(use.data, 1, function(x) gene.max*x/max(x)))
+  
+  ep@meta.data$G1S.Score <- colMeans(use.data[g1s.genes, rownames(ep@meta.data)])
+  ep@meta.data$G2M.Score <- colMeans(use.data[g2m.genes, rownames(ep@meta.data)])
+  
+  ep@meta.data$Phase[ep@meta.data$G1S.Score < th.g1s & ep@meta.data$G2M.Score < th.g2m] <- "Quiescent"
+  ep@meta.data$Phase[!(ep@meta.data$G1S.Score < th.g1s & ep@meta.data$G2M.Score < th.g2m) & (ep@meta.data$G1S.Score < ep@meta.data$G2M.Score)] <- "G2/M"
+  ep@meta.data$Phase[!(ep@meta.data$G1S.Score < th.g1s & ep@meta.data$G2M.Score < th.g2m) & (ep@meta.data$G1S.Score > ep@meta.data$G2M.Score) & ep@meta.data$G2M.Score < th.g2m] <- "G1"
+  ep@meta.data$Phase[!(ep@meta.data$G1S.Score < th.g1s & ep@meta.data$G2M.Score < th.g2m) & (ep@meta.data$G1S.Score > ep@meta.data$G2M.Score) & ep@meta.data$G2M.Score > th.g2m] <- "S"
+  ep@meta.data$Phase <- factor(ep@meta.data$Phase, levels = c("G2/M","S","G1","Quiescent"))
+  
+  
+  if(add.dr.ccscore){
+    SetDimReduction(ep, reduction.type = 'ccscore',
+                    slot = 'cell.embeddings',
+                    new.data = as.matrix(ep@meta.data[,c("G1S.Score","G2M.Score")]))
+  }
+  ep
+}
+
+
+markTFSM <- function(df, gene, TFs = geneset$tf_mmu$Symbol, SMs = geneset$sp_mmu){
+  df$TF <- gene %in% TFs
+  df$SM <- gene %in% SMs
+  return(df)
+}
+
+boxFeaturePlot <- function(object, features.plot, nCol, reduction.use = 'tsne', cols.use = pal_light, coord.fixed = 1, pt.size = 2){
+  cowplot::plot_grid(plotlist = lapply(
+    FeaturePlot(object, features.plot = features.plot, nCol = nCol, reduction.use = reduction.use,
+                cols.use = cols.use, coord.fixed = coord.fixed, pt.size = pt.size, do.return = T, no.axes = T),
+  function(p) {p + coord_fixed(ratio = coord.fixed) + theme(panel.border = element_rect(colour = "black", size = 1,linetype = 1))}),
+          ncol = nCol)
+}
+
+# stacked violin plot 
+stackedViolinPlot <- function(expr_matrix, genes.use, meta_data, group.by, 
+                              groups = NULL, groups.order = NULL, cols.use, ncol){
+  ggData <- melt(cbind(meta_data[,group.by,drop = F], t(expr_matrix[genes.use,])), 
+                 id.vars = group.by, measure.vars = genes.use, 
+                 variable.name = 'Gene',value.name = 'Expression')
+  if(!is.null(groups)) {
+    ggData <- subset(ggData, ggData[,group.by] %in% groups)
+  }
+  
+  if(!is.null(groups.order)){
+    ggData[,group.by] <- factor(ggData[,group.by], groups.order)
+  }
+  
+  ggplot(ggData) +
+    geom_violin(mapping = aes_string(x = group.by, y = 'Expression', fill = group.by),
+                scale = 'width') +
+    scale_fill_manual(values = cols.use) +
+    facet_wrap(~Gene, ncol=ncol) +
+    #coord_flip() +
+    theme(legend.position = 'none', axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# dotplot 
+#######################
+myDotPlot <- function(expr, genes, groupby, groups = NULL,
+                      use_raw = T, log_func = 'log2', 
+                      gradientn_colors = c("grey90","grey","orange", "red","brown"),
+                      capped = NA){
+  require(reshape2)
+  require(ggplot2)
+  if(!is.null(groups)){
+    expr <- expr[,groupby %in% groups,drop = F]
+    groupby <- droplevels(groupby[groupby %in% groups])
+  }
+  genes <- rev(genes)
+  tmpData1 <- apply(expr[genes,,drop = F], 1, function(x){
+    tapply(x, list(groupby = groupby), function(y){
+      if(use_raw){
+        if(log_func == 'log2'){
+          log2(mean(2^y-1)+1)
+        }else if(log_func == 'log'){
+          log(mean(exp(y)-1)+1)
+        }
+      }else{
+        mean(y)
+      }
+    })
+  })
+  tmpData2 <- apply(expr[genes,,drop = F], 1, function(x){
+    tapply(x, list(groupby = groupby), function(y){
+      sum(y > 0)/length(y)
+    })
+  })
+  dotData <- cbind(melt(tmpData1), melt(tmpData2))[,-c(4,5)]
+  colnames(dotData) <- c("groupby", "genes", "Average_expression", "Percentage")
+  if(is.factor(groupby)){
+    dotData$groupby <- factor(dotData$groupby, levels = levels(groupby))
+  }
+  if(!is.na(capped)){
+    dotData$Average_expression[dotData$Average_expression > capped] <- capped
+  }
+  #dotData$Cluster <- factor(dotData$Cluster, levels = paste0("EP", 7:1))
+  ggplot(dotData) +
+    geom_point(mapping = aes(genes, groupby, color = Average_expression, size = Percentage)) +
+    scale_color_gradientn(colours =gradientn_colors)+
+    #scale_color_gradientn(colours = c("grey90","grey",brewer.pal(n = 9, name = "YlOrRd")[-c(1,2,3,5,7,8)]))+
+    scale_size_continuous(range = c(0,5), limits = c(0,1))+
+    coord_flip() + theme_cowplot() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+          axis.line = element_blank(),
+          panel.border = element_rect(linetype = 1, color = "black", fill = NA))
+}
+```
+
+# Main dataset
+## loading MAIN data including `Body` and `Neg in Body` at `E9.5` and `E10.0`, and `DA` at `E10.0`, `E10.5` and `E11.0`
+```{r main_data, message=FALSE, warning=FALSE}
+tmp <- load("190830_data_main.Rdata")
+tmp # annot_main, umi_main, data_color
+
+annot_main$nGene <- colSums(umi_main > 0)
+annot_main$nUMI <- colSums(umi_main)
+
+annot <- subset(annot_main, nGene > 2000 & nUMI > 100000)
+umi <- umi_main[,rownames(annot)]
+nrow(annot_main) # 662
+nrow(annot) # 597 after qc
+nrow(annot)/nrow(annot_main)
+
+data_color$Phase <- setNames(c('#F15A24','#F7931E','#FCEE21','#29ABE2'), nm = c('G2/M','S','G1','Quiescent'))# set phase colors 
+annot$Stage <- factor(annot$Stage, levels = c("E9.5", "E10.0", "E10.5", "E11.0"))# factor Stage
+
+data_color$Cluster_new <- setNames(c(data_color$Cluster[c("EP6", "EP3","EP5","EP4","HC2")], "grey"), 
+                                   c("vEC",'miAEC','meAEC','HEC','HC','Neg'))
+data_color$Location <- data_color$Location[c("AGM","PK44", "Body", "DA", "Neg")]
+```
+
+## QC boxplot
+```{r main_QC, fig.width=2.5, fig.height=3}
+# QC Plots
+ggplot(annot) +
+  geom_boxplot(mapping = aes(Location, nGene, fill = Location)) +
+  scale_fill_manual(values = data_color$Location) +
+  #facet_wrap(~Location) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        legend.position = 'none') +
+  labs(y = 'No. of expressed genes') 
+mean(annot$nGene)
+
+ggplot(annot) +
+  geom_boxplot(mapping = aes(Location, nUMI, fill = Location)) +
+  scale_fill_manual(values = data_color$Location) +
+  #facet_wrap(~Location) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        legend.position = 'none') +
+  labs(y = 'No. of transcripts')
+mean(annot$nUMI)
+```
+
+## Dimension Reduction and Clustering analysis using Seurat
+```{r main_dr_clustering, message=FALSE, warning=FALSE}
+# Construct Seurat Object and filter genes expressed less than 3 cells
+expr <- apply(umi, 2, function(x) {
+  log2(1e5*x/sum(x) +1)
+})
+ep <- CreateSeuratObject(raw.data = expr, min.cells = 3, min.genes = 0, meta.data = annot)
+ep <- FindVariableGenes(ep, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(ep@var.genes) # 1306
+hvgs_ep <- setdiff(ep@var.genes, go_ccgenes) # 1254
+ep <- ScaleData(ep)
+ep <- RunPCA(ep, pcs.compute = 100, pc.genes = hvgs_ep, do.print = F)
+PCElbowPlot(ep, num.pc = 50)
+ep <- RunTSNE(ep, dims.use = 1:15)
+ep <- FindClusters(ep, dims.use = 1:15, force.recalc = T, resolution = 0.8, print.output = F)
+ep@meta.data$Cluster_new <- plyr::mapvalues(ep@ident, from = 0:5, to = c("vEC",'miAEC','Neg','meAEC','HEC','HC'))
+ep@meta.data$Cluster_new[ep@meta.data$Location == "Neg"] <- "Neg"
+ep@meta.data$Cluster_new <- factor(ep@meta.data$Cluster_new, levels = c("vEC",'miAEC','meAEC','HEC','HC','Neg'))
+
+table(ep@meta.data[,c('Stage','Cluster_new',"Location")])
+ep <- AddCCscore(ep, th.g1s = 2, th.g2m = 2, g1s.genes = geneset$g1s, g2m.genes = geneset$g2m, add.dr = T, use.scale = F, gene.max = NULL)
+```
+
+## Plot cell labels on tSNE
+```{r main_tsne_category, fig.width=4, fig.height=2}
+DimPlot(ep, reduction.use = 'tsne', group.by = 'Location', cols.use = data_color$Location,
+        pt.size = 1.5, no.axes = T, do.return = T) +
+  coord_fixed(ratio = 1/0.8) + theme(panel.border = element_rect(color = "black", fill = NA,linetype = 1))
+DimPlot(ep, reduction.use = 'tsne', group.by = 'Stage', cols.use = data_color$Stage,
+        pt.size = 1.5, no.axes = T, do.return = T) +
+  coord_fixed(ratio = 1/0.8) + theme(panel.border = element_rect(color = "black", fill = NA,linetype = 1))
+DimPlot(ep, reduction.use = 'tsne', group.by = 'Cluster_new', cols.use = data_color$Cluster_new,
+        pt.size = 1.5, no.axes = T, do.return = T) +
+  coord_fixed(ratio = 1/0.8) + theme(panel.border = element_rect(color = "black", fill = NA,linetype = 1))
+```
+
+## VlnPlot of selected Markers 
+```{r main_vln_markers, fig.width=5, fig.height=4}
+# FeaturePlot(ep, features.plot = c('nGene','nUMI'), 
+#             reduction.use = 'tsne', cols.use = c("grey", brewer.pal(9, "YlOrRd")))
+ep_markers <- c("Pecam1", 'Cdh5', 'Ptprc','Runx1','Itga2b','Spn','Nr2f2','Gja5','Ltbp4')
+# FeaturePlot(ep, features.plot = c("Pecam1", 'Cdh5', 'Ptprc','Spn','Itga2b','Runx1','Nr2f2','Gja5'), 
+#             reduction.use = 'tsne', cols.use = pal_light, 
+#             nCol = 4,coord.fixed = 1)
+
+stackedViolinPlot(expr_matrix = ep@data, ep_markers, ep@meta.data, 
+                  group.by = 'Cluster_new', cols.use = data_color$Cluster_new, ncol = 3) +
+  labs(x = NULL)
+```
+
+
+## remove negative and ambiguous cells
+Filter out cells belonging to Neg Cluster or expressing Ptprc (CD45) and Spn (CD43) (log2(TPM/10+1) > 1)
+```{r main_woNeg}
+cells_removed <- rownames(subset(ep@meta.data, Cluster_new == "Neg" | ep@data["Ptprc",] > 1 | ep@data["Spn",] > 1))
+eprm <- SubsetData(ep, cells.use = setdiff(rownames(ep@meta.data), cells_removed), subset.raw = T)
+eprm@meta.data$Cluster_new <- droplevels(eprm@meta.data$Cluster_new)
+table(eprm@meta.data[,c('Stage','Cluster_new',"Location")])
+
+```
+
+save ep and data_color (code not shown)
+```{r eval=F, include=T}
+save(ep, eprm, data_color, file = "./190830_mHEC_data/seurat.ep.eprm.data_color.Rdata")
+```
+
+## HEC subdivision
+we could subdivide HEC into subclusters, but they failed to have distinct molecular features.
+```{r HEC_subdivide, message=FALSE, warning=FALSE, fig.width=3, fig.height=3}
+eprm_hec <- SubsetData(eprm, cells.use = rownames(subset(eprm@meta.data, Cluster_new == "HEC")), subset.raw = T)
+eprm_hec <- FindVariableGenes(eprm_hec, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_hec@var.genes) 
+hvgs_hec <- setdiff(eprm_hec@var.genes, go_ccgenes) 
+eprm_hec <- ScaleData(eprm_hec)
+eprm_hec <- RunPCA(eprm_hec, pcs.compute = 30, pc.genes = hvgs_hec, do.print = F)
+PCElbowPlot(eprm_hec, num.pc = 30)
+eprm_hec <- RunTSNE(eprm_hec, genes.use = hvgs_hec, perplexity = 10)
+eprm_hec <- FindClusters(eprm_hec, genes.use = hvgs_hec, force.recalc = T, resolution = 1, print.output = F)
+DimPlot(eprm_hec, reduction.use = 'pca',  coord.fixed = 1, pt.size = 1.5)
+
+DimPlot(eprm_hec, reduction.use = 'tsne',  group.by = "Stage", coord.fixed = 1, pt.size = 1.5)
+#fisher.test(table(eprm_hec@meta.data[,c("Stage")], eprm_hec@ident)[1:2,])
+#FeaturePlot(eprm_hec, features.plot = c("Spi1"), cols.use = pal_light, reduction.use = "pca")
+
+```
+
+Valcano plot shows minor change between 2 HEC subclusters.
+```{r HEC_subdivide_degs,message=FALSE, warning=FALSE, fig.width=5, fig.height=3}
+hec_wilcox <- apply(eprm_hec@data, 1, function(x){
+  g0 <- x[eprm_hec@ident == 0]
+  g1 <- x[eprm_hec@ident == 1]
+  wilcox.test(g0, g1)$p.value
+})
+hec_fc <- rowMeans(exp(eprm_hec@data[, eprm_hec@ident == 0]))/rowMeans(exp(eprm_hec@data[, eprm_hec@ident == 1]))
+hec_degs <- data.frame(pvalue = hec_wilcox, fc = hec_fc)
+hec_degs$gene <- rownames(hec_degs)
+hec_degs$padj <- p.adjust(hec_degs$pvalue, method = "BH")
+hec_degs$lfc <- log2(hec_degs$fc)
+hec_degs$lpadj <- -log10(hec_degs$padj)
+hec_degs$lpvalue <- -log10(hec_degs$pvalue)
+hec_degs$sig <- "N.S."
+hec_degs$sig[hec_degs$padj < 0.05 & hec_degs$fc > 1.5] <- "up-regulation"
+hec_degs$sig[hec_degs$padj < 0.05 & hec_degs$fc < 1/1.5] <- "down-regulation"
+hec_degs$sig <- factor(hec_degs$sig, levels = c("up-regulation", "down-regulation", 'N.S.'))
+
+hec_degs_markers <- c("Kit", 'Runx1')
+hec_degs$markers <- hec_degs$gene %in% hec_degs_markers
+
+ggplot(hec_degs, mapping = aes(lfc, lpadj)) +
+  # geom_point(mapping = aes(color = sig, size = abs(lfc), alpha = lpadj), show.legend = F) +
+  # geom_point(mapping = aes(size = abs(lfc)), shape = 1,color = "black", data = subset(hec_degs, markers), show.legend = F) +
+  geom_point(mapping = aes(color = sig), show.legend = F) +
+  geom_point(shape = 1, color = "black", data = subset(hec_degs, markers), show.legend = F) +
+  geom_text_repel(mapping = aes(label = gene, color = sig), data = subset(hec_degs, sig != 'N.S.'), 
+                  min.segment.length = unit(0, 'lines'), seed = 666) +
+  geom_text_repel(mapping = aes(label = gene), color = "black", data = subset(hec_degs, gene %in% hec_degs_markers), seed = 666) +
+  scale_color_manual(values = c('N.S.' = 'grey', 'up-regulation'= 'red', 'down-regulation' = 'blue')) +
+  geom_hline(mapping = aes(yintercept = -log10(0.05)), linetype = 2) +
+  geom_vline(mapping = aes(xintercept = -log2(1.5)), linetype = 2) +
+  geom_vline(mapping = aes(xintercept = log2(1.5)), linetype = 2) +
+  lims(y = c(0,2)) +
+  labs(x = 'log2(Fold Change)', y = '-log10(adjusted P value)') +
+  guides(color = guide_legend(title = "Direction"))
+
+#ggsave("./190830_mHEC_files/volcano_hec.pdf", width = 5, height = 3)
+#hec_subdivision_comp <- compareCluster(gene~sig, data = subset(hec_degs, sig != 'N.S.') %>% group_by(sig) %>% top_n(200, lpadj), 
+#                         OrgDb = org.Mm.eg.db, ont = "BP")
+#dotplot(hec_subdivision_comp, title = "GO:BP enrichment results")
+```
+
+save eprm_hec and hec_degs  (code not shown)
+```{r eval=FALSE, include=T}
+save(eprm_hec, hec_degs, data_color, file = "./190830_mHEC_data/seurat.eprm_hec.hec_degs.Rdata")
+```
+
+## miAEC subdivision
+we could subdivide miAEC into subclusters
+```{r miAEC_subdivide, message=FALSE, warning=FALSE, fig.width=3, fig.height=3}
+eprm_miaec <- SubsetData(eprm, cells.use = rownames(subset(eprm@meta.data, Cluster_new == "miAEC")), subset.raw = T)
+eprm_miaec <- FindVariableGenes(eprm_miaec, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_miaec@var.genes) 
+hvgs_miaec <- setdiff(eprm_miaec@var.genes, go_ccgenes) 
+eprm_miaec <- ScaleData(eprm_miaec)
+eprm_miaec <- RunPCA(eprm_miaec, pcs.compute = 30, pc.genes = hvgs_miaec, do.print = F)
+PCElbowPlot(eprm_miaec, num.pc = 30)
+eprm_miaec <- RunTSNE(eprm_miaec, genes.use = hvgs_miaec, perplexity = 10)
+eprm_miaec <- FindClusters(eprm_miaec, genes.use = hvgs_miaec, force.recalc = T, resolution = 1, print.output = F)
+DimPlot(eprm_miaec, reduction.use = 'pca',  coord.fixed = 1, pt.size = 1.5)
+
+DimPlot(eprm_miaec, reduction.use = 'tsne',  group.by = "Stage", coord.fixed = 1, pt.size = 1.5)
+#fisher.test(table(eprm_miaec@meta.data[,c("Stage")], eprm_miaec@ident)[1:2,])
+#FeaturePlot(eprm_miaec, features.plot = c("Spi1"), cols.use = pal_light, reduction.use = "pca")
+
+```
+
+Valcano plot shows minor change between 2 HEC subclusters.
+```{r miAEC_subdivide_degs,message=FALSE, warning=FALSE, fig.width=5, fig.height=3}
+miaec_wilcox <- apply(eprm_miaec@data, 1, function(x){
+  g0 <- x[eprm_miaec@ident == 0]
+  g1 <- x[eprm_miaec@ident == 1]
+  wilcox.test(g0, g1)$p.value
+})
+miaec_fc <- rowMeans(exp(eprm_miaec@data[, eprm_miaec@ident == 0]))/rowMeans(exp(eprm_miaec@data[, eprm_miaec@ident == 1]))
+miaec_degs <- data.frame(pvalue = miaec_wilcox, fc = miaec_fc)
+miaec_degs$gene <- rownames(miaec_degs)
+miaec_degs$padj <- p.adjust(miaec_degs$pvalue, method = "BH")
+miaec_degs$lfc <- log2(miaec_degs$fc)
+miaec_degs$lpadj <- -log10(miaec_degs$padj)
+miaec_degs$lpvalue <- -log10(miaec_degs$pvalue)
+miaec_degs$sig <- "N.S."
+miaec_degs$sig[miaec_degs$padj < 0.05 & miaec_degs$fc > 1.5] <- "up-regulation"
+miaec_degs$sig[miaec_degs$padj < 0.05 & miaec_degs$fc < 1/1.5] <- "down-regulation"
+miaec_degs$sig <- factor(miaec_degs$sig, levels = c("up-regulation", "down-regulation", 'N.S.'))
+
+miaec_degs_markers <- c("Kit", 'Runx1')
+miaec_degs$markers <- miaec_degs$gene %in% miaec_degs_markers
+
+ggplot(miaec_degs, mapping = aes(lfc, lpadj)) +
+  geom_point(mapping = aes(color = sig), show.legend = F) +
+  geom_point(shape = 1,color = "black", data = subset(miaec_degs, markers), show.legend = F) +
+  geom_text_repel(mapping = aes(label = gene, color = sig), data = subset(miaec_degs, sig != 'N.S.') %>% group_by(sig) %>% top_n(10, lpadj), 
+                  min.segment.length = unit(0, 'lines'), seed = 666) +
+  geom_text_repel(mapping = aes(label = gene), color = "black", data = subset(miaec_degs, gene %in% miaec_degs_markers), seed = 666) +
+  scale_color_manual(values = c('N.S.' = 'grey', 'up-regulation'= 'red', 'down-regulation' = 'blue')) +
+  geom_hline(mapping = aes(yintercept = -log10(0.05)), linetype = 2) +
+  geom_vline(mapping = aes(xintercept = -log2(1.5)), linetype = 2) +
+  geom_vline(mapping = aes(xintercept = log2(1.5)), linetype = 2) +
+  labs(x = 'log2(Fold Change)', y = '-log10(adjusted P value)') +
+  guides(color = guide_legend(title = "Direction"))
+
+#ggsave(filename = "./190830_mHEC_files/volcano_miaec.pdf", width = 5, height = 3)
+#miaec_subdivision_comp <- compareCluster(gene~sig, data = subset(miaec_degs, sig != 'N.S.') %>% group_by(sig) %>% top_n(200, lpadj), 
+#                         OrgDb = org.Mm.eg.db, ont = "BP")
+#dotplot(miaec_subdivision_comp, title = "GO:BP enrichment results")
+```
+
+save eprm_miaec and miaec_degs  (code not shown)
+```{r eval=FALSE, include=T}
+save(eprm_miaec, miaec_degs, data_color, file = "./190830_mHEC_data/seurat.eprm_miaec.miaec_degs.Rdata")
+```
+
+
+## Pseudotime analysis
+using monocle2 to reconstruct the pseudo-development path
+
+### HEC specification
+```{r HEC_branch_DR}
+eprm_pt <- SubsetData(eprm, cells.use = rownames(subset(eprm@meta.data, Cluster_new %in% c('miAEC','meAEC', 'HEC'))), subset.raw = T)
+eprm_pt <- FindVariableGenes(eprm_pt, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_pt@var.genes) # 1197
+hvgs_pt <- setdiff(eprm_pt@var.genes, go_ccgenes) # 1119
+eprm_pt <- ScaleData(eprm_pt)
+eprm_pt <- RunPCA(eprm_pt, pcs.compute = 100, pc.genes = hvgs_pt, do.print = F)
+eprm_pt@meta.data$Cluster_new <- droplevels(eprm_pt@meta.data$Cluster_new)
+ribosome_genes <- grep(pattern = "Rp[sl].*", rownames(umi_main), value = T)
+eprm_pt@meta.data$nRibosome <- colSums(umi_main[ribosome_genes, rownames(eprm_pt@meta.data)])
+```
+
+```{r HEC_branch_PCA, fig.width=4, fig.height=2}
+eprm_pt@dr$pca@cell.embeddings[,2] <- -eprm_pt@dr$pca@cell.embeddings[,2] # flip the sign of PC2 for better visualization
+DimPlot(eprm_pt, reduction.use = 'pca', group.by = 'Location', cols.use = data_color$Location, plot.title = "PCA",
+        coord.fixed = 1, pt.size = 1.5, no.axes = T, do.return = T) +
+  theme(panel.border = element_rect(color = "black",fill = NA, size = 1, linetype = 1))
+DimPlot(eprm_pt, reduction.use = 'pca', group.by = 'Stage', cols.use = data_color$Stage,  plot.title = "PCA",
+        coord.fixed = 1, pt.size = 1.5, no.axes = T, do.return = T) +
+  theme(panel.border = element_rect(color = "black",fill = NA, size = 1, linetype = 1))
+DimPlot(eprm_pt, reduction.use = 'pca', group.by = 'Cluster_new', cols.use = data_color$Cluster_new, plot.title = "PCA",
+        coord.fixed = 1, pt.size = 1.5, no.axes = T, do.return = T) +
+  theme(panel.border = element_rect(color = "black",fill = NA, size = 1, linetype = 1))
+```
+
+```{r HEC_branch_ribo, fig.width=3, fig.height=3}
+ggplot(data = eprm_pt@meta.data,
+       mapping = aes(Cluster_new, nGene)) +
+  geom_violin(aes(fill = Cluster_new), show.legend = F, scale = "width") +
+  geom_boxplot(fill = "white", width = 0.3, outlier.shape = NA) +
+  scale_fill_manual(values = data_color$Cluster_new) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.border = element_rect(colour = "black", size = 1, linetype = 1)) + 
+  labs(x = NULL, y = "No. of expressed genes") +
+  lims(y = c(0,12000)) +
+  stat_compare_means(method = 'wilcox.test', 
+                     comparisons = list(c("miAEC", "HEC"), c("meAEC",'HEC')),  
+                     method.args = list(alternative = "less"))
+
+ggplot(data = eprm_pt@meta.data,
+       mapping = aes(Cluster_new, nUMI)) +
+  geom_violin(aes(fill = Cluster_new), show.legend = F, scale = "width") +
+  geom_boxplot(fill = "white", width = 0.3, outlier.shape = NA) +
+  scale_fill_manual(values = data_color$Cluster_new) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.border = element_rect(colour = "black", size = 1, linetype = 1)) + 
+  labs(x = NULL, y = "No. of transcripts") +
+  lims(y = c(0,3000000)) +
+  stat_compare_means(method = 'wilcox.test', 
+                     comparisons = list(c("miAEC", "HEC"), c("meAEC",'HEC')),  
+                     method.args = list(alternative = "less"))
+
+ggplot(data = eprm_pt@meta.data,
+       mapping = aes(Cluster_new, nRibosome)) +
+  geom_violin(aes(fill = Cluster_new), show.legend = F, scale = "width") +
+  geom_boxplot(fill = "white", width = 0.3, outlier.shape = NA) +
+  scale_fill_manual(values = data_color$Cluster_new) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.border = element_rect(colour = "black", size = 1, linetype = 1)) + 
+  labs(x = NULL, y = "No. of ribosomal transcripts") +
+  lims(y = c(0,500000)) +
+  stat_compare_means(method = 'wilcox.test', 
+                     comparisons = list(c("miAEC", "HEC"), c("meAEC",'HEC')),  
+                     method.args = list(alternative = "less"))
+```
+
+### Monocle 2
+```{r HEC_branch_monocle2, fig.width=3, fig.height=3}
+umi_pt <- as.matrix(umi_main[,rownames(eprm_pt@meta.data)])
+pd <- new("AnnotatedDataFrame", data = eprm_pt@meta.data)
+fd <- new("AnnotatedDataFrame", data = data.frame(gene_short_name = rownames(umi_pt),
+                                                  row.names = rownames(umi_pt)))
+
+cds_pt <- newCellDataSet(umi_pt, phenoData = pd, featureData = fd, expressionFamily=negbinomial())
+cds_pt <- estimateSizeFactors(cds_pt)
+cds_pt <- estimateDispersions(cds_pt)
+disp_table <- dispersionTable(cds_pt)
+ordering_genes <- subset(disp_table,
+#                         mean_expression >= 1 &
+                           dispersion_empirical >= 1.5 * dispersion_fit)$gene_id
+ordering_genes <- setdiff(ordering_genes, go_ccgenes)
+cds_pt <- setOrderingFilter(cds_pt, ordering_genes)
+cds_pt <- reduceDimension(cds_pt, reduction_method = "DDRTree")
+cds_pt <- orderCells(cds_pt)
+plot_cell_trajectory(cds_pt, color_by = "State",  theta = 180, cell_size = 2)
+cds_pt <- orderCells(cds_pt, root_state = 2)
+
+plot_cell_trajectory(cds_pt, color_by = "Pseudotime", 
+                     show_branch_points = F, theta = 180) + 
+  scale_color_gradientn(colours =  RColorBrewer::brewer.pal(5,"Spectral")) +
+  scale_size(range = c(3,3))
+
+plot_cell_trajectory(cds_pt, color_by = "Cluster_new", 
+                     show_branch_points = F, theta = 180, cell_size = 2) + 
+  scale_color_manual(values = data_color$Cluster_new) + coord_fixed(ratio = 1)
+
+plot_cell_trajectory(cds_pt, color_by = "Location",
+                     show_branch_points = F, theta = 180, cell_size = 2) +
+  scale_color_manual(values = data_color$Location) + coord_fixed(ratio = 1)
+plot_cell_trajectory(cds_pt, color_by = "Stage",
+                     show_branch_points = F, theta = 180, cell_size = 2) +
+  scale_color_manual(values = data_color$Stage) + coord_fixed(ratio = 1)
+
+
+# plot_cell_trajectory(cds_pt, markers = c("Runx1"), use_color_gradient = T, 
+#                      show_branch_points = F, theta = 180, cell_size = 1.5) +
+#   scale_color_gradientn(colours = pal_light) + coord_fixed(ratio = 1)
+# plot_cell_trajectory(cds_pt, markers = c("Ltbp4"), use_color_gradient = T, 
+#                      show_branch_points = F, theta = 180, cell_size = 1.5) +
+#   scale_color_gradientn(colours = pal_light) + coord_fixed(ratio = 1)
+# plot_cell_trajectory(cds_pt, markers = c("Gja5"), use_color_gradient = T, 
+#                      show_branch_points = F, theta = 180, cell_size = 1.5) +
+#   scale_color_gradientn(colours = pal_light) + coord_fixed(ratio = 1)
+# 
+# plot_cell_trajectory(cds_pt, markers = c("Cxcr4"), use_color_gradient = T, 
+#                      show_branch_points = F, theta = 180, cell_size = 1.5) +
+#   scale_color_gradientn(colours = pal_light) + coord_fixed(ratio = 1)
+```
+
+#### Branch Pattern by monocle2
+```{r HEC_brach_pattern0, eval=FALSE, include=FALSE}
+#BEAM_res <- BEAM(cds_pt, branch_point = 1, cores = 8)
+load("./190830_mHEC_data/BEAM_res.Rdata")
+BEAM_res <- BEAM_res[order(BEAM_res$qval),]
+BEAM_res <- BEAM_res[,c("gene_short_name", "pval", "qval")]
+plot_genes_branched_heatmap(cds_pt[row.names(subset(BEAM_res,
+                                          qval < 1e-4)),],
+                                          branch_point = 1,
+                                          num_clusters = 10,
+                                          cores = 8,
+                                          use_gene_short_name = T,
+                                          show_rownames = T)
+pt_genes <- row.names(subset(fData(cds_pt),
+          gene_short_name %in% c("En1", "Neurl3", "Runx1")))
+plot_genes_branched_pseudotime(cds_pt[pt_genes,],
+                       branch_point = 1,
+                       color_by = "Cluster_new", relative_expr = F,
+                       ncol = 1)
+```
+
+#### HEC specification smooth heatmap
+```{r HEC_branch_heatmap, fig.height=2.5,fig.width=6}
+hec_spec_genes <- c("Pecam1", "Cdh5", "Sox18", "Kdr",'Gja4','Gja5',"Sox17", "Myb", "Kit", "Spi1", "Runx1", "Adgrg1")
+hec_spec_data <- eprm@data[hec_spec_genes, colnames(cds_pt)[cds_pt$State %in% c(3)]]
+hec_spec_data <- hec_spec_data[,order(cds_pt$Pseudotime[cds_pt$State %in% c(3)])]
+
+pheatmap(rowSmooth(hec_spec_data, n = 15), cluster_rows = F, cluster_cols = F, show_colnames = F, 
+         color = c(colorRampPalette(c("grey60", "white"))(10), colorRampPalette(c(RColorBrewer::brewer.pal(9, "YlOrRd")))(60)),
+         breaks = c(seq(0,7, length.out = 71)),
+         annotation_col = eprm@meta.data[,c("Cluster_new"), drop = F],
+         annotation_colors = list(Cluster_new = data_color$Cluster_new), border_color = NA
+         #, filename = "./190830_mHEC_files/hec_pt.heatmap.pdf", width = 6, height = 2.5
+         )
+```
+### Pattern Heatmaps
+```{r HEC_branch_pattern1, fig.height=3, fig.width=8}
+# pt_genes_annot <- identifyPatternGenes(eprm_pt@data, cluster = eprm_pt@meta.data$Cluster_new, fc_th = 2)
+# save(pt_genes_annot, file = "./190830_mHEC_data/pt_genes_annot.Rdata")
+load("./190830_mHEC_data/pt_genes_annot.Rdata")
+pt_genes_annot$TFs <- pt_genes_annot$gene %in% geneset$tf_mmu$Symbol
+pt_genes_used <- subset(pt_genes_annot, aov.padj < 0.05 & rowSums(abs(pt_genes_annot[,c(6:7)])) >0)
+pt_genes_used$pattern <- apply(pt_genes_used[,c(6:7)], 1, paste, collapse = "_")
+#pt_patt_order <- sort(table(pt_genes_used$pattern), decreasing = T)
+pt_genes_used$pattern <- factor(pt_genes_used$pattern, 
+                                levels = c("-1_0", "0_1", "-1_1", "0_-1", "1_0", "1_-1", "1_1", "-1_-1"))
+
+#pheatmap(t(ptHeatData[,c(6:7)]), show_colnames = F, cluster_cols = F)
+#pheatmap(t(ptHeatData[ptHeatData$TFs,c(6:7)]), show_colnames = T, cluster_cols = F)
+```
+
+
+
+```{r HEC_branch_pattern2, fig.height=8, fig.width=8}
+ptHeatData <- pt_genes_used[sample(1:nrow(pt_genes_used), nrow(pt_genes_used)),]
+ptHeatData <- ptHeatData[order(ptHeatData$pattern),]
+ptHeatData2 <- MinMax(eprm_pt@scale.data[ptHeatData$gene, 
+                                         sample(rownames(eprm_pt@meta.data), 
+                                                nrow(eprm_pt@meta.data))],
+                      -2, 2)
+ptHeatData2 <- ptHeatData2[,order(eprm_pt@meta.data[colnames(ptHeatData2), "Cluster_new"])]
+ptHeatData2_pattAnnot <- as.data.frame(ptHeatData[,c(6:7)])
+
+pheatmap(ptHeatData2, show_rownames = F, show_colnames = F,
+         color = gplots::bluered(21),
+         cluster_rows = F, cluster_cols = F, 
+         annotation_row = ptHeatData[,c(6:7)],
+         annotation_col = eprm_pt@meta.data[,c("Cluster_new"), drop = F],
+         annotation_colors = c(data_color,list(`HEC-miAEC` = c("blue", "white", "red"),
+                                  `HEC-meAEC` = c("blue", "white", "red"),
+                                  `meAEC-miAEC` = c("blue", "white", "red"))))
+table(ptHeatData$pattern)
+
+ptHeatData3 <- ptHeatData2[ptHeatData$TFs, order(cds_pt[,colnames(ptHeatData2)]$Pseudotime)]
+ptHeatData3 <- ptHeatData3[with(ptHeatData[rownames(ptHeatData3),], order(pattern,aov.pvalue)),]
+pheatmap(rowSmooth(ptHeatData3[, cds_pt[,colnames(ptHeatData3)]$State %in% c(1,2)], n = 20),
+         show_rownames = T, show_colnames = F,
+         color = gplots::bluered(21),
+         cluster_rows = F, cluster_cols = F, 
+         annotation_row = ptHeatData[,c(6:7)],
+         annotation_col = eprm_pt@meta.data[,c("Cluster_new"), drop = F],
+         annotation_colors = c(data_color,list(`HEC-miAEC` = c("blue", "white", "red"),
+                                  `HEC-meAEC` = c("blue", "white", "red"),
+                                  `meAEC-miAEC` = c("blue", "white", "red"))))
+pheatmap(rowSmooth(ptHeatData3[, cds_pt[,colnames(ptHeatData3)]$State %in% c(2,3)], n = 20),
+         show_rownames = T, show_colnames = F,
+         color = gplots::bluered(21),
+         cluster_rows = F, cluster_cols = F, 
+         annotation_row = ptHeatData[,c(6:7)],
+         annotation_col = eprm_pt@meta.data[,c("Cluster_new"), drop = F],
+         annotation_colors = c(data_color,list(`HEC-miAEC` = c("blue", "white", "red"),
+                                  `HEC-meAEC` = c("blue", "white", "red"),
+                                  `meAEC-miAEC` = c("blue", "white", "red"))))
+
+```
+
+
+### Pattern Diagram
+```{r HEC_branch_pattern_diagram, fig.width=2, fig.height=8}
+ggPatt <- ptHeatData
+ggPatt$HEC <- ggPatt$HEC-ggPatt$miAEC
+ggPatt$meAEC <- ggPatt$meAEC-ggPatt$miAEC
+ggPatt$miAEC <- 0
+ggPattData <- data.frame(HEC = tapply(ggPatt$HEC, list(ggPatt$pattern), median),
+                         meAEC = tapply(ggPatt$meAEC, list(ggPatt$pattern), median),
+                         miAEC = tapply(ggPatt$miAEC, list(ggPatt$pattern), median),
+                         pattern = tapply(as.character(ggPatt$pattern), list(ggPatt$pattern), unique),
+                         count = tapply(as.character(ggPatt$pattern), list(ggPatt$pattern), length))
+ggPattData$pattern <- factor(ggPattData$pattern, levels = levels(ggPatt$pattern))
+ggplot(ggPattData) +
+  geom_point(aes(0, miAEC), color = "blue") +
+  geom_point(aes(1, meAEC), color = "darkred") +
+  geom_segment(mapping = aes(0,0,xend =1,yend=meAEC), color = 'darkred') +
+  geom_point(aes(1, HEC), color = 'orange', shape = 1) +
+  geom_segment(mapping = aes(0,0,xend = 1,yend= HEC), color = 'orange') +
+  geom_label(aes(0.5, 1, label = count), color = 'black') +
+  facet_wrap(~pattern, nrow = 8)
+```
+#### Branch TF network
+```{r HEC_branch_pattern_cytoscape, eval = F}
+# pattern gene
+ggPattData$pid <- paste0("Pattern", 1:8)
+pt_genes_used$pid <- plyr::mapvalues(pt_genes_used$pattern, ggPattData$pattern, ggPattData$pid)
+pt_genes_used$pid <- as.character(pt_genes_used$pid)
+pgenes <- as.data.frame(t(apply(eprm_pt@data[pt_genes_used$gene,], 2, function(x) {
+  tapply(x, list(Pattern = pt_genes_used$pid), mean)
+  })))
+# network
+pt_tfs <- pt_genes_used$gene[pt_genes_used$TFs]
+
+wgcnaExpr <- t(rbind(eprm_pt@data[pt_tfs,], t(pgenes)))
+
+pgenes_tf_cor <- apply(pgenes, 2, function(x){
+  apply(eprm_pt@data[pt_tfs,], 1, function(y) {cor(x,y)})
+})
+
+annot_node <- data.frame(Pattern = c(pt_genes_used[pt_tfs,"pid"], paste0("Pattern", 1:8)), 
+                         Correlation = c(sapply(pt_tfs, function(x) pgenes_tf_cor[x,pt_genes_used[x, "pid"]]), rep(1,8)),
+                         Type = c(rep("TF",length(pt_tfs)), rep("Pattern",8)),
+                         row.names = colnames(wgcnaExpr))
+
+TOM = TOMsimilarityFromExpr(wgcnaExpr, power = 6, networkType = "signed hybrid", TOMType = "signed")
+TOM = TOMsimilarityFromExpr(wgcnaExpr, power = 6, networkType = "unsigned", TOMType = "unsigned")
+
+cyt = exportNetworkToCytoscape(TOM,
+                               edgeFile = "./190830_mHEC_data/CytoscapeInput-edges.txt",
+                               nodeFile = "./190830_mHEC_data/CytoscapeInput-nodes.txt",
+                               weighted = TRUE,
+                               threshold = 0.01,
+                               nodeNames = colnames(wgcnaExpr),
+                               nodeAttr = annot_node)
+```
+
+#### Branch TF plot
+```{r HEC_branch_pattern_gene, fig.height=4, fig.width=12, eval = F, include=F}
+#BEAM_res <- BEAM(cds_pt, branch_point = 1, cores = 8)
+pt_genes <- ptHeatData[ptHeatData$TFs, ]
+pt_genes <- pt_genes[order(pt_genes$pattern, pt_genes$aov.padj),]
+
+for(i in unique(pt_genes$pattern)){
+  tmp <- pt_genes[pt_genes$pattern == i, "gene"]
+  if(length(tmp) < 2) tmp <- c(tmp, "Runx1", "Mycn")
+plot_genes_branched_pseudotime(cds_pt[pt_genes[pt_genes$pattern == i, "gene"],,drop = F],
+                       branch_point = 1, #min_expr = 1,
+                       method = 'fitting',
+                       color_by = "Cluster_new", relative_expr = T,
+                       ncol = 10)
+  ggsave(filename = paste0("branch_genes.", i,".pdf"), width = 25, height = 2*ceiling(length(tmp)/10))
+}
+
+pt_genes_select <- c("Hmgb2", "Runx1", "Spi1", "Gfi1", "Mycn", "Sox17", "Nfib", "Foxc2", "Gata6", "Fosb", "Nfia", "Foxc1")
+plot_genes_branched_pseudotime(cds_pt[pt_genes_select,],
+                       branch_point = 1, #min_expr = 1,
+                       method = 'loess', 
+                       color_by = "Cluster_new", relative_expr = T,
+                       ncol = 4) + 
+  scale_color_manual(values = c(data_color$Cluster_new, Y_26 = "#8B0101", Y_16 ="#FF8C01" )) +
+  scale_fill_manual(values = data_color$Cluster_new)
+```
+
+### DEGs for metascape
+the following chunck is not run
+```{r HEC_branch_degs, eval=F}
+eprm_pt <- SetAllIdent(eprm_pt, id = "Cluster_new")
+pt_degs <- FindAllMarkers(eprm_pt, logfc.threshold = log(2), min.pct = 0.25, only.pos = T)
+pt_degs <- subset(pt_degs, p_val_adj < 0.05)
+degsToMeatascape(pt_degs, txt = './190830_mHEC_data/pseudo_degs.metascape.txt')
+```
+
+### Runx1-correlated genes in AEC and HEC
+
+```{r HEC_branch_runx1_cor, fig.width=8}
+human_runx1_cor_genes <- c("MYB", "GNB2L1", "ANGPT1", "IL1RL1", "NPM1", "TFDP2", "HSP90AB1", "TKT", "CCNB1IP1", "ANP32B", "HNRNPA1", "USPL1", "BCL7A", "PDE8B", "MMP9", "PRKY", "BTBD2", "ZMAT1", "SPOCK3", "RSL1D1", "DCXR", "MYCN", "SEC31B", "KLHL13", "SNHG15", "ADNP2", "SETD2", "HMGA1", "PLEKHH3", "TKFC")
+
+pt_runx1_cor <- sort(apply(eprm_pt@data, 1, function(x){
+  cor(x, eprm_pt@data["Runx1",])
+}), decreasing = T)
+
+pt_runx1_cor_topn <- 50
+
+ggplot(mapping = aes(1:pt_runx1_cor_topn, pt_runx1_cor[1:pt_runx1_cor_topn + 1])) +
+  geom_bar(stat = "identity", fill = "royalblue", width = 0.5) +
+  labs(x = NULL, y = "Pearson correlation co-efficient", title = "Genes positively correlated with Runx1") +
+  scale_x_continuous(expand = c(0.01,0.1)) +
+  scale_y_continuous(limits = c(0,1),expand = c(0,0)) +
+  geom_text(mapping = aes(label = names(pt_runx1_cor[1:pt_runx1_cor_topn +1])), 
+            angle = 45, fontface = 'italic', hjust= 0, vjust = -0.2) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+pt_genes_used$patternID <- plyr::mapvalues(pt_genes_used$pattern, from = c("-1_0", "0_1", "-1_1", "0_-1", 
+                                                                           "1_0", "1_-1", "1_1", "-1_-1"), 
+                                           to = paste0("Pattern", 1:8))
+
+
+pt_runx1_cor_topn_genes <- names(pt_runx1_cor[1:pt_runx1_cor_topn +1])
+tmp <- setNames(pt_genes_used[pt_runx1_cor_topn_genes, "patternID"], pt_runx1_cor_topn_genes)
+#write.csv(x = tmp, file = "./190830_mHEC_files/pt_runx1_cor_top50_genes.pattern.csv")
+
+intersect(human_runx1_cor_genes, toupper(names(pt_runx1_cor[1:pt_runx1_cor_topn +1])))
+```
+
+save eprm_pt, cds_pt, pt_genes_annot and pt_degs (code not shown)
+```{r eval=FALSE}
+write.csv(pt_genes_used, file = "./190830_mHEC_data/pt_genes_used.csv")
+save(eprm_pt, cds_pt, pt_genes_annot, pt_genes_used, pt_degs, pt_runx1_cor, data_color, file = "./190830_mHEC_data/seurat.eprm_pt.cds_pt.pt_genes_annot.pt_degs.pt_runx1_cor.Rdata")
+```
+
+### G1S vs G2/M plot 
+```{r HEC_branch_cc, fig.width=4}
+ggplot(eprm_pt@meta.data) +
+  geom_point(mapping = aes(G1S.Score, G2M.Score, color = Cluster_new)) +
+  scale_color_manual(values = data_color$Cluster_new) +
+  geom_segment(mapping = aes(2,0,xend = 2,yend = 2)) +
+  geom_segment(mapping = aes(0,2,xend = 5,yend = 2)) +
+  geom_segment(mapping = aes(2,2,xend = 5,yend = 5)) +
+  coord_fixed(ratio = 1, expand = F, xlim = c(0,4.5))
+
+# cc
+ggData <- melt(table(eprm_pt@meta.data[,c('Cluster_new', 'Phase')]))
+ggData$Phase <- factor(ggData$Phase, levels = c("G2/M", 'S', 'G1', 'Quiescent'))
+ggplot(ggData) +
+  geom_bar(mapping = aes(Cluster_new, value, fill = Phase), stat = 'identity', position = 'fill') +
+  #scale_fill_manual(values = pal_cluster) +
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = data_color$Phase) +
+  scale_y_continuous(expand = c(0,0), 
+                     labels = scales::percent(seq(0, 1, 0.25)))+
+  labs(x = NULL, y = "Percentage") 
+
+```
+
+## HEC marker screening
+```{r HEC_sorting_marker, message=FALSE, warning=FALSE, fig.width=10, fig.height=3}
+eprm <- SetAllIdent(eprm, id = "Cluster_new")
+#degs_HECvsmiAEC <- FindMarkers(eprm, ident.1 = "HEC", ident.2 = "miAEC", logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'wilcox')
+#degs_HECvsmeAEC <- FindMarkers(eprm, ident.1 = "HEC", ident.2 = "meAEC", logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'wilcox')
+#degs_HECvsOthers <- FindMarkers(eprm, ident.1 = "HEC", ident.2 = NULL, logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'wilcox')
+
+marker_HECvsmiAEC <- FindMarkers(eprm, #genes.use = rownames(subset(degs_HECvsmiAEC, p_val_adj < 0.05)),
+                                 ident.1 = "HEC", ident.2 = "miAEC", logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'roc')
+marker_HECvsmeAEC <- FindMarkers(eprm, #genes.use = rownames(subset(degs_HECvsmeAEC, p_val_adj < 0.05)), 
+                                 ident.1 = "HEC", ident.2 = "meAEC", logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'roc')
+marker_HECvsOthers <- FindMarkers(eprm, #genes.use = rownames(subset(degs_HECvsOthers, p_val_adj < 0.05)), 
+                                  ident.1 = "HEC", ident.2 = c("miAEC","meAEC",'vEC'), logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'roc')
+marker_HECvsmiAEC <- subset(marker_HECvsmiAEC, power > 0.4)
+marker_HECvsmeAEC <- subset(marker_HECvsmeAEC, power > 0.4)
+marker_HECvsOthers <- subset(marker_HECvsOthers, power > 0.4)
+
+marker_HECvsmiAEC$SM <- rownames(marker_HECvsmiAEC) %in% geneset$sp_mmu
+marker_HECvsmeAEC$SM <- rownames(marker_HECvsmeAEC) %in% geneset$sp_mmu
+marker_HECvsOthers$SM <- rownames(marker_HECvsOthers) %in% geneset$sp_mmu
+rownames(marker_HECvsOthers[marker_HECvsOthers$SM,])[1:10]
+rownames(marker_HECvsmiAEC[marker_HECvsmiAEC$SM,])[1:10]
+rownames(marker_HECvsmeAEC[marker_HECvsmeAEC$SM,])[1:10]
+
+Runx1_EPcells <- eprm@meta.data$Cluster_new %in% c("HEC", "miAEC","meAEC",'vEC')
+markers_Runx1 <- sort(apply(eprm@data[,Runx1_EPcells], 
+                            1,
+                            function(x) {
+                              cor(x, eprm@data["Runx1", Runx1_EPcells])
+                              }), 
+                      decreasing = T)
+(markers_Runx1[names(markers_Runx1) %in% geneset$sp_mmu])[1:10]
+
+
+pk44Gene <- data.frame(order = 1:10, 
+                       HECvsOthers = rownames(marker_HECvsOthers[marker_HECvsOthers$SM,])[1:10],
+                       HECvsmiAEC = rownames(marker_HECvsmiAEC[marker_HECvsmiAEC$SM,])[1:10],
+                       HECvsmeAEC = rownames(marker_HECvsmeAEC[marker_HECvsmeAEC$SM,])[1:10],
+                       Runx1 = names(markers_Runx1[names(markers_Runx1) %in% geneset$sp_mmu])[1:10])
+pk44Value <- data.frame(order = 1:10, 
+                       HECvsOthers = marker_HECvsOthers[marker_HECvsOthers$SM,][1:10,"power"],
+                       HECvsmiAEC = marker_HECvsmiAEC[marker_HECvsmiAEC$SM,][1:10,"power"],
+                       HECvsmeAEC = marker_HECvsmeAEC[marker_HECvsmeAEC$SM,][1:10,"power"],
+                       Runx1 = (markers_Runx1[names(markers_Runx1) %in% geneset$sp_mmu])[1:10])
+
+ggPK44Gene <- melt(pk44Gene, id.vars = c("order"), measure.vars = c("HECvsOthers", "HECvsmiAEC", "HECvsmeAEC","Runx1"))
+ggPK44Gene$variable <- factor(ggPK44Gene$variable, levels = c("Runx1", "HECvsmeAEC", "HECvsmiAEC","HECvsOthers"))
+ggPK44Value <- melt(pk44Value, id.vars = c("order"), measure.vars = c("HECvsOthers", "HECvsmiAEC", "HECvsmeAEC","Runx1"))
+ggPK44Value$variable <- factor(ggPK44Value$variable, levels = c("Runx1", "HECvsmeAEC", "HECvsmiAEC","HECvsOthers"))
+ggplot() +
+  geom_tile(mapping = aes(order, variable),fill = NA, data = ggPK44Value)+
+  geom_tile(mapping = aes(order, variable, fill = value), data = subset(ggPK44Value, variable != "Runx1"))+
+  scale_fill_gradient(limits = c(0.4, 1), low = "white", high = "cyan", na.value = "grey90") +
+  new_scale_fill() +
+  geom_tile(mapping = aes(order, variable, fill = value), data = subset(ggPK44Value, variable == "Runx1"))+
+  scale_fill_gradient(limits = c(0.3, 0.8),low = "yellow", high = "green", na.value = NA) +
+  geom_text(mapping = aes(order, variable, label = value), data = ggPK44Gene) + 
+  labs(x = NULL, y = NULL) +
+  theme(axis.ticks = element_blank(), axis.text.x = element_blank(), legend.position = "bottom")
+#ggsave("./190830_mHEC_files/PK44_marker_screen.pdf", width = 10, height = 3)
+```
+
+
+# Add PK44
+
+## QC for MAIN+PK44
+```{r QC_pk44}
+tmp <- load("190903_data_pk44.Rdata")
+tmp
+
+annot_pk44$nGene <- colSums(umi_pk44 > 0)
+annot_pk44$nUMI <- colSums(umi_pk44)
+
+annot_pk44 <- rbind(annot_main[rownames(eprm@meta.data),], annot_pk44)
+umi_pk44 <- cbind(umi_main[,rownames(eprm@meta.data)], umi_pk44)
+
+
+annot <- subset(annot_pk44, nGene > 2000 & nUMI > 100000)
+umi <- umi_pk44[,rownames(annot)]
+nrow(annot_pk44) # 758
+nrow(annot) # 687 after qc
+nrow(annot)/nrow(annot_pk44)
+table(annot$DataSet)
+table(annot_pk44$DataSet)
+
+
+annot$Stage <- factor(annot$Stage, levels = c("E9.5", "E10.0", "E10.5", "E11.0"))# factor Stage
+data_color$Cluster_new <- setNames(c(data_color$Cluster[c("EP6", "EP3","EP5","EP4","PK44","HC1")], "grey"), 
+                                   c("vEC",'miAEC','meAEC','HEC',"PK44",'HC','Neg'))
+
+```
+
+## Dimension Reduction
+```{r PK44_dr}
+expr <- apply(umi, 2, function(x) {
+  log2(1e5*x/sum(x) +1)
+})
+eprm_pk44 <- CreateSeuratObject(raw.data = expr, min.cells = 3, min.genes = 0, meta.data = annot)
+# Filter cells expressing Ptprc (CD45) and Spn (CD43) (log2(TPM/10+1) > 1)
+# eprm_pk44 <- SubsetData(eprm_pk44, cells.use = rownames(subset(eprm_pk44@meta.data, 
+#                                                      eprm_pk44@data["Ptprc",] < 1 & eprm_pk44@data["Spn",] < 1)), 
+#                    subset.raw = T)
+table(eprm_pk44@meta.data$DataSet)
+
+eprm_pk44 <- FindVariableGenes(eprm_pk44, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_pk44@var.genes) # 1286
+eprm_pk44 <- ScaleData(eprm_pk44)
+eprm_pk44 <- RunPCA(eprm_pk44, pcs.compute = 100, do.print = F)
+PCElbowPlot(eprm_pk44, num.pc = 50)
+eprm_pk44 <- RunTSNE(eprm_pk44, dims.use = 1:15)
+eprm_pk44@meta.data$Cluster_new <- "PK44"
+eprm_pk44@meta.data[rownames(eprm@meta.data), "Cluster_new"] <- as.character(eprm@meta.data$Cluster_new)
+eprm_pk44@meta.data$Cluster_new <- factor(eprm_pk44@meta.data$Cluster_new, levels = c("vEC",'miAEC','meAEC','HEC',"PK44",'HC','Neg'))
+
+eprm_pk44 <- AddCCscore(eprm_pk44, th.g1s = 2, th.g2m = 2, g1s.genes = geneset$g1s, g2m.genes = geneset$g2m, 
+                        add.dr = T, use.scale = F, gene.max = NULL)
+```
+
+save eprm_pk44, and data_color (code not shown)
+```{r eval=FALSE, include=FALSE}
+save(eprm_pk44, data_color, file = "./190830_mHEC_data/seurat.eprm_pk44.data_color.Rdata")
+```
+
+## Plot cell labels on tSNE
+```{r PK44_tsne_category,fig.height=2.5}
+DimPlot(eprm_pk44, reduction.use = 'tsne', group.by = 'Location', cols.use = data_color$Location, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.5) 
+DimPlot(eprm_pk44, reduction.use = 'tsne', group.by = 'Stage', cols.use = data_color$Stage,  pt.size = 2, do.return = T) +
+  coord_fixed(1/1.5) 
+DimPlot(eprm_pk44, reduction.use = 'tsne', group.by = 'Phase', cols.use = data_color$Phase,  pt.size = 2, do.return = T) +
+  coord_fixed(1/1.5) 
+DimPlot(eprm_pk44, reduction.use = 'tsne', group.by = 'Cluster_new', cols.use = data_color$Cluster_new,  pt.size = 2, do.return = T) +
+  coord_fixed(1/1.5) 
+
+```
+## HEC markers heatmap
+```{r PK44_hec_deg, fig.width=6, fig.height=4}
+eprm_pk44 <- SetAllIdent(eprm_pk44, id = "Cluster_new")
+pk44_degs_hec <- FindMarkers(eprm_pk44, ident.1 = "HEC", ident.2 = c("vEC", "miAEC", "meAEC", "HC"), logfc.threshold = log(2), min.pct = 0.25, only.pos = T)
+pk44_degs_pk44 <- FindMarkers(eprm_pk44, ident.1 = "PK44", ident.2 = c("vEC", "miAEC", "meAEC", "HC"), logfc.threshold = log(2), min.pct = 0.25, only.pos = T)
+
+pk44_degs_hec_sig <- subset(pk44_degs_hec, p_val_adj < 0.05)
+pk44_degs_pk44_sig <- subset(pk44_degs_pk44, p_val_adj < 0.05)
+
+pk44_degs_phData <- MinMax(eprm_pk44@scale.data[rownames(pk44_degs_hec_sig), sample(rownames(eprm_pk44@meta.data), nrow(eprm_pk44@meta.data))], -2, 2)
+
+eprm_pk44@meta.data$Cluster_tmp <- factor(as.character(eprm_pk44@meta.data$Cluster_new),
+                                          levels = c("HC","vEC", "miAEC", "meAEC","HEC",'PK44'))
+pk44_degs_phData <- pk44_degs_phData[,order(eprm_pk44@meta.data[colnames(pk44_degs_phData),"Cluster_tmp"])]
+pheatmap(pk44_degs_phData,
+         color = gplots::bluered(51),
+         cluster_rows = F, cluster_cols = F, 
+         show_rownames = T, show_colnames = F,
+         labels_row = ifelse(rownames(pk44_degs_phData) %in% c("Procr", "Runx1", "Gfi1", "Cd44","Neurl3", "Adgrg1", "Nupr1", "Hlf", "Mycn","Myb", "Ikzf2", 'Bcl11a', 'Angpt1'),
+                             rownames(pk44_degs_phData), ""),
+         annotation_col = eprm_pk44@meta.data[,c("Cluster_new"), drop = F],  
+         annotation_colors = data_color)
+```
+
+## lightening plot
+```{r PK44_tsne_markers, eval = F,fig.width=10, fig.height=6}
+boxFeaturePlot(eprm_pk44, features.plot = c("Kit", "Runx1", "Procr", "Gfi1", "Cd44", "Neurl3"), nCol = 3, coord.fixed = 1/1.5, pt.size = 2)
+```
+
+## Heatmap for select genes
+```{r PK44_heatmap, fig.width=10, fig.height=4}
+pk44_heatmap_genes <- c("Itga2b", "Etv2", "Ptprc", "Gfi1b", "Runx1", "Itgb3", "Spi1", "Gfi1", "Myb")
+pk44_heatmap_data <- eprm_pk44@data[pk44_heatmap_genes, eprm_pk44@meta.data$Cluster_new %in% c("miAEC", "meAEC", "HEC", "PK44")]
+pk44_heatmap_data <- pk44_heatmap_data[,order(eprm_pk44@meta.data[colnames(pk44_heatmap_data),"Cluster_new"],
+                                              eprm_pk44@meta.data[colnames(pk44_heatmap_data), "Stage"])]
+pheatmap(pk44_heatmap_data, cluster_rows = F, cluster_cols = F, show_colnames = F, 
+         color = c("grey", "green3", "yellowgreen","yellow", "orange", "red", "brown", "black"),
+         annotation_col = eprm_pk44@meta.data[,c("Location", "Stage", "Cluster_new")],
+         annotation_colors = data_color[c("Cluster_new", "Stage", "Location")]
+         #, filename = "./190830_mHEC_files/pk44_heatmap_figs2.pdf", width = 10, height = 4
+         )
+```
+
+## Plot HSC signature
+```{r main_tsne_markers2,fig.width=20, fig.height=3}
+boxFeaturePlot(eprm_pk44, c('Adgrg1','Ikzf2', 'Bcl11a', "Runx1", 'Neurl3', 'Angpt1', 'Gfi1', 'Hlf'), nCol = 8, coord.fixed = 1/1.5)
+# stackedViolinPlot(expr_matrix = ep@data, c('Adgrg1','Ikzf2', 'Bcl11a', 'Neurl3', 'Angpt1', 'Gfi1', 'Hlf'), 
+#                  ep@meta.data, group.by = 'Cluster_new', cols.use = data_color$Cluster_new, ncol = 7) + labs(x = NULL)
+```
+
+# Add T1
+## QC for MAIN+PK44+T1
+```{r QC_T1}
+tmp <- load("190903_data_T1.Rdata")
+tmp
+
+annot_T1$nGene <- colSums(umi_T1 > 0)
+annot_T1$nUMI <- colSums(umi_T1)
+
+# notice annot_pk44 actually have included annot_main
+annot_T1 <- rbind(annot_pk44, annot_T1)
+umi_T1 <- cbind(umi_pk44, umi_T1)
+
+
+annot <- subset(annot_T1, nGene > 2000 & nUMI > 100000)
+umi <- umi_T1[,rownames(annot)]
+nrow(annot_T1) # 805
+nrow(annot) # 730 after qc
+nrow(annot)/nrow(annot_T1)
+table(annot$DataSet)
+table(annot_T1$DataSet)
+
+annot$Stage <- factor(annot$Stage, levels = c("E9.5", "E10.0", "E10.5", "E11.0"))# factor Stage
+data_color$Cluster_T1 <- setNames(c(data_color$Cluster[c("EP6", "EP3","EP5","EP4",'YS2',"HC1")], "grey"), 
+                                   c("vEC",'miAEC','meAEC','HEC (tif)','T1 pre-HSC','HC','Neg'))
+```
+
+## Dimension Reduction
+```{r T1_dr}
+expr <- apply(umi, 2, function(x) {
+  log2(1e5*x/sum(x) +1)
+})
+eprm_T1 <- CreateSeuratObject(raw.data = expr, min.cells = 3, min.genes = 0, meta.data = annot)
+# Filter cells expressing Ptprc (CD45) and Spn (CD43) (log2(TPM/10+1) > 1)
+table(eprm_T1@meta.data$DataSet)
+
+eprm_T1 <- FindVariableGenes(eprm_T1, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_T1@var.genes) # 1267
+eprm_T1 <- ScaleData(eprm_T1)
+eprm_T1 <- RunPCA(eprm_T1, pcs.compute = 100, do.print = F)
+PCElbowPlot(eprm_T1, num.pc = 50)
+eprm_T1 <- RunTSNE(eprm_T1, dims.use = 1:15)
+eprm_T1@meta.data$Cluster_T1 <- "T1 pre-HSC"
+eprm_T1@meta.data[rownames(eprm_pk44@meta.data), "Cluster_T1"] <- plyr::mapvalues(as.character(eprm_pk44@meta.data$Cluster_new), c("HEC", "PK44") , c('HEC (tif)', 'HEC (tif)'))
+eprm_T1@meta.data$Cluster_T1 <- factor(eprm_T1@meta.data$Cluster_T1, levels = c('HC',"vEC",'miAEC','meAEC','HEC (tif)','T1 pre-HSC'))
+
+eprm_T1 <- FindClusters(eprm_T1, dims.use = 1:15, force.recalc = T, print.output = F)
+DimPlot(eprm_T1, reduction.use = 'tsne', pt.size = 2, do.return = T) +
+  coord_fixed(1/1.2) 
+eprm_T1@meta.data$Cluster_T1_new <- eprm_T1@ident
+
+eprm_T1 <- AddCCscore(eprm_T1, th.g1s = 2, th.g2m = 2, g1s.genes = geneset$g1s, g2m.genes = geneset$g2m, 
+                        add.dr = T, use.scale = F, gene.max = NULL)
+```
+## Plot cell labels on tSNE
+```{r T1_tsne_category, fig.height=2.5}
+DimPlot(eprm_T1, reduction.use = 'tsne', group.by = 'Location', cols.use = data_color$Location, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.2) 
+DimPlot(eprm_T1, reduction.use = 'tsne', group.by = 'Stage', cols.use = data_color$Stage, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.2) 
+DimPlot(eprm_T1, reduction.use = 'tsne', group.by = 'Phase', cols.use = data_color$Phase,pt.size = 2, do.return = T) +
+  coord_fixed(1/1.2) 
+DimPlot(eprm_T1, reduction.use = 'tsne', group.by = 'Cluster_T1', cols.use = data_color$Cluster_T1, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.2) 
+```
+## Violin
+```{r T1_violin, fig.width=4, fig.height=3}
+eprm_T1 <- SetAllIdent(eprm_T1, "Cluster_T1")
+stackedViolinPlot(expr_matrix = eprm_T1@data, meta_data = eprm_T1@meta.data, 
+                  genes.use = c("Kit", "Procr", "Cd44", "Runx1", "Gfi1", "Spn"), ncol = 3,
+                  groups = c("HEC (tif)","T1 pre-HSC","meAEC"), groups.order = c("meAEC","T1 pre-HSC","HEC (tif)"),
+                  group.by = "Cluster_T1", cols.use = data_color$Cluster_T1) +
+  labs(x = NULL)
+#ggsave(filename = "./190830_mHEC_files/t1_vln_fig3b.1.pdf", width = 4, height = 4)
+stackedViolinPlot(expr_matrix = eprm_T1@data, meta_data = eprm_T1@meta.data, 
+                  genes.use = c("Gja5", "Emcn", "Runx1t1", "Procr"), ncol = 3,
+                  groups = c("miAEC","HEC (tif)","PK44","T1 pre-HSC"), group.by = "Cluster_T1", cols.use = data_color$Cluster_T1) +
+  labs(x = NULL)
+
+```
+
+
+
+## HEC+T1 analysis
+```{r T1_HEC}
+eprm_T1_sub <- SubsetData(eprm_T1, cells.use = rownames(subset(eprm_T1@meta.data, Cluster_T1 %in% c("T1 pre-HSC", "HEC (tif)"))), subset.raw = T)
+# eprm_T1_sub <- SetAllIdent(eprm_T1_sub, id = "Cluster_T1")
+# tmp_degs <- FindAllMarkers(object = eprm_T1_sub, logfc.threshold = log(1.5),  min.pct = 0.25, only.pos = T)
+# eprm_T1_sub <- FindVariableGenes(eprm_T1_sub, x.low.cutoff = 0.5, x.high.cutoff = 8, y.cutoff = 1) 
+# length(eprm_T1_sub@var.genes)
+eprm_T1_sub <- ScaleData(eprm_T1_sub, do.scale = T, do.center = T)
+
+eprm_T1_sub <- RunPCA(eprm_T1_sub, pcs.compute = 50, do.print = F, pc.genes = setdiff(eprm_T1_sub@var.genes, go_ccgenes))
+eprm_T1_sub <- ProjectPCA(eprm_T1_sub, do.print = F, do.center = T)
+```
+
+### PCA
+```{r T1_HEC_PCA}
+DimPlot(eprm_T1_sub, reduction.use = 'pca', group.by = 'Cluster_T1', cols.use = data_color$Cluster_T1,  pt.size = 2, do.return = T) +
+  coord_fixed(1/0.8)# + scale_y_continuous(limits = c(-10, 10))
+#ggsave(filename = "./190830_mHEC_files/t1_tif_pca.pdf", width = 4, height = 3)
+```
+### PCA enrichment
+```{r T1_HEC_PCA_GO, fig.width=8, eval=F}
+pc2_topn <- 300
+t1_pc2 <- PCTopGenes(eprm_T1_sub, pc.use = 2, num.genes = pc2_topn*2, use.full = T, do.balanced = T)
+
+t1_pc2_pos <- enrichGO(gene = t1_pc2[(pc2_topn+1):(pc2_topn*2)], OrgDb = org.Mm.eg.db, keyType = "SYMBOL", ont = "BP")
+t1_pc2_neg <- enrichGO(gene = t1_pc2[1:pc2_topn], OrgDb = org.Mm.eg.db, keyType = "SYMBOL", ont = "BP")
+
+t1_pc2_pos_sim <- clusterProfiler::simplify(t1_pc2_pos)
+t1_pc2_neg_sim <- clusterProfiler::simplify(t1_pc2_neg)
+
+goBarPlot(t1_pc2_pos, limits = c(0,22), title = "Enriched GO terms of PC2 positive genes")
+#ggsave(filename = "./190830_mHEC_files/t1_enrich_pc2_pos.pdf", width = 6, height = 3)
+goBarPlot(t1_pc2_neg, limits = c(0,22), title = "Enriched GO terms of PC2 negative genes")
+#ggsave(filename = "./190830_mHEC_files/t1_enrich_pc2_neg.pdf", width = 6, height = 3)
+
+#write.csv(t1_pc2, file = "t1_pc2.genes.csv")
+```
+### PC2 heatmap
+```{r T1_HEC_PC2_heatmap, fig.width=6, fig.height=5}
+t1_pc2 <- PCTopGenes(eprm_T1_sub, pc.use = 2, num.genes = 400, use.full = F, do.balanced = T)
+topn <- 20
+t1_pc2_phgenes <- t1_pc2[c(1:topn, (400-topn):400)]
+t1_pc2_phgenes <- t1_pc2_phgenes[!grepl(pattern = ".*Rik$", x = t1_pc2_phgenes, perl = T)]
+t1_phdata1 <- eprm_T1_sub@data[t1_pc2_phgenes, order(eprm_T1_sub@dr$pca@cell.embeddings[,"PC2"], decreasing = T)]
+t1_phdata2 <- t(scale(t(t1_phdata1)))
+t1_phdata3 <- MinMax(t1_phdata2, -2, 2)
+pheatmap(t1_phdata3,# scale = "row",
+         color = gplots::bluered(51),
+         cluster_rows = F, cluster_cols = F, show_colnames = F,
+         annotation_col = eprm_T1_sub@meta.data[,c("Cluster_T1"),drop = F],
+         annotation_colors = data_color,
+         #,filename = "./190830_mHEC_files/t1_tif_pca.heatmap.pdf", width = 6, height = 5
+         )
+```
+### G1S vs G2/M plot 
+```{r T1_HEC_cc,fig.width=4}
+ggplot(eprm_T1_sub@meta.data) +
+  geom_point(mapping = aes(G1S.Score, G2M.Score, color = Cluster_T1)) +
+  scale_color_manual(values = data_color$Cluster_T1) +
+  geom_segment(mapping = aes(2,0,xend = 2,yend = 2)) +
+  geom_segment(mapping = aes(0,2,xend = 5,yend = 2)) +
+  geom_segment(mapping = aes(2,2,xend = 5,yend = 5)) +
+  coord_fixed(ratio = 1, expand = F, xlim = c(0,4.5))
+
+table(droplevels(eprm_T1_sub@meta.data[,c("Cluster_T1", "Phase")]))
+
+# cc
+ggData <- melt(table(droplevels(eprm_T1_sub@meta.data[,c('Cluster_T1', 'Phase')])))
+ggData$Phase <- factor(ggData$Phase, levels = c("G2/M", 'S', 'G1', 'Quiescent'))
+ggplot(ggData) +
+  geom_bar(mapping = aes(Cluster_T1, value, fill = Phase), stat = 'identity', position = 'fill') +
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = data_color$Phase) +
+  scale_y_continuous(expand = c(0,0), 
+                     labels = scales::percent(seq(0, 1, 0.25)))+
+  labs(x = NULL, y = "Percentage") 
+```
+
+### Monocle 2
+```{r T1_branch_monocle2, eval=FALSE, fig.height=4, fig.width=5, include=FALSE}
+pt_t1_cells <- rownames(subset(eprm_T1@meta.data, Cluster_new %in% c("miAEC","meAEC", "HEC", "PK44", "T1")))
+umi_pt_t1 <- as.matrix(umi_T1[,pt_t1_cells])
+pd <- new("AnnotatedDataFrame", data = eprm_T1@meta.data[pt_t1_cells,])
+fd <- new("AnnotatedDataFrame", data = data.frame(gene_short_name = rownames(umi_pt_t1),
+                                                  row.names = rownames(umi_pt_t1)))
+
+cds_pt_t1 <- newCellDataSet(umi_pt_t1, phenoData = pd, featureData = fd, expressionFamily=negbinomial())
+cds_pt_t1 <- estimateSizeFactors(cds_pt_t1)
+cds_pt_t1 <- estimateDispersions(cds_pt_t1)
+disp_table <- dispersionTable(cds_pt_t1)
+ordering_genes <- subset(disp_table,
+#                         mean_expression >= 1 &
+                           dispersion_empirical >= 1.5 * dispersion_fit)$gene_id
+ordering_genes <- setdiff(ordering_genes, go_ccgenes)
+cds_pt_t1 <- setOrderingFilter(cds_pt_t1, ordering_genes)
+cds_pt_t1 <- reduceDimension(cds_pt_t1, reduction_method = "DDRTree")
+cds_pt_t1 <- orderCells(cds_pt_t1)
+plot_cell_trajectory(cds_pt_t1, color_by = "State")
+cds_pt_t1 <- orderCells(cds_pt_t1, root_state = 2)
+
+plot_cell_trajectory(cds_pt_t1, color_by = "Pseudotime", 
+                     show_branch_points = F, theta = 180) + 
+  scale_color_gradientn(colours =  RColorBrewer::brewer.pal(3,"Spectral")) +
+  scale_size(range = c(3,3))
+
+plot_cell_trajectory(cds_pt_t1, color_by = "Cluster_T1", 
+                     show_branch_points = F, theta = 180) + 
+  scale_color_manual(values = data_color$Cluster_new) + coord_fixed(ratio = 1)
+#plot_cell_trajectory(cds_pt_t1, color_by = "Cluster_hec")
+plot_cell_trajectory(cds_pt_t1, color_by = "Location",
+                     show_branch_points = F, theta = 180) +
+  scale_color_manual(values = data_color$Location) + coord_fixed(ratio = 1)
+plot_cell_trajectory(cds_pt_t1, color_by = "Stage",
+                     show_branch_points = F, theta = 180) +
+  scale_color_manual(values = data_color$Stage) + coord_fixed(ratio = 1)
+
+#plot_cell_trajectory(cds_pt_t1, markers = "Runx1", use_color_gradient = T) + scale_color_gradientn(colours =  c("grey90","grey","orange", "red","brown"))
+```
+
+### Mpath
+```{r T1_mpath, eval=F}
+eprm_T1_mpath <- SubsetData(eprm_T1, cells.use = rownames(subset(eprm_T1@meta.data, Cluster_T1 %in% c("miAEC","meAEC", "HEC (tif)",  "T1 pre-HSC"))), subset.raw = T)
+eprm_T1_mpath <- FindVariableGenes(eprm_T1_mpath, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+
+neighbor_network <- build_network(exprs = eprm_T1_mpath@data[eprm_T1_mpath@var.genes,],
+                                  landmark_cluster = data.frame(cells = rownames(eprm_T1_mpath@meta.data),
+                                                                clusters = eprm_T1_mpath@meta.data$Cluster_T1),
+                                  baseName = "T1_mpath")
+
+### TrimNet: trim edges of lower weights
+trimmed_net <- trim_net(neighbor_network,textSize=30,
+                        baseName = "T1_mpath",
+                        method = "TrimNet",
+                        start = "miAEC")
+# color_code_node_2(networkFile = networkFile,
+#                   rpkmFile = rpkmFile,
+#                   lmFile = lmFile,
+#                   geneName = geneName,
+#                   baseName = "Marker",
+#                   seed=3)
+```
+
+save eprm_T1_sub, eprm_T1_sub and data_color (code not run)
+```{r eval=FALSE}
+save(eprm_T1, eprm_T1_sub, data_color, file = "./190830_mHEC_data/seurat.eprm_T1.eprm_T1_sub.data_color.Rdata")
+```
+
+## HEC IHC marker screening
+```{r HEC_IHC_marker, message=FALSE, warning=FALSE, fig.width=12, fig.height=5}
+eprm <- SetAllIdent(eprm, id = "Cluster_new")
+marker_ihc_hec <- list()
+for(i in setdiff(unique(eprm@meta.data$Cluster_new), "HEC")){
+  tmp <- FindMarkers(eprm, ident.1 = "HEC", ident.2 = i, logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'wilcox')
+  tmp <- FindMarkers(eprm, genes.use = rownames(subset(tmp, p_val_adj < 0.05)),
+                     ident.1 = "HEC", ident.2 = i, logfc.threshold = log(2), min.pct = 0.25, only.pos = T, test.use = 'roc')
+  #tmp <- subset(tmp, myAUC > 0.7)
+  marker_ihc_hec[[i]] <- tmp
+}
+
+marker_ihc_hec_genes <- Reduce(intersect, lapply(marker_ihc_hec, function(x){
+  tmp <- subset(x, power > 0.4)
+  rownames(tmp)
+}))
+marker_ihc_hec_genes
+marker_emp_ncb <- c("Gsta4", "Spi1", "Alox5ap")
+marker_emp_ref <- c("Myb")
+c("Gck", "Dnmt3b", "Cebpb", "Slc7a8")
+c("Phgdh","Nop10", "Rangrf", "Polr2f","Ccnd2", "Fkbp4","Siva1","Dctpp1","Tomm5","Ift57")
+c("Hlf", "Gfi1","Mycn","Neurl3","Lmo1","Nupr1", "Sfrp2", "Eya2")
+# CD45+ cells exhibited higher levels of Spi1 and Cebpb (doi: 10.1093/nar/gkx573)
+marker_highly <- names(which(rowSums(log(AverageExpression(eprm, genes.use = marker_ihc_hec_genes)) > 2) == 5))
+marker_lowly <- marker_ihc_hec_genes[which(log(AverageExpression(eprm, genes.use = marker_ihc_hec_genes))[,'HEC',drop=F] < 2)]
+marker_ihc_hec_genes_used <- setdiff(marker_ihc_hec_genes, c(marker_emp_ncb, marker_emp_ref, marker_highly, marker_lowly))
+
+# stackedViolinPlot(expr_matrix = eprm@data, genes.use = marker_ihc_hec_genes_used, 
+#                   meta_data = eprm@meta.data,
+#                   group.by = "Cluster_new", cols.use = data_color$Cluster, ncol = 6)
+```
+## Dotplot identify HEcn
+```{r hecn_dotplot, fig.width=5, fig.height=4}
+marker_ihc_hec_genes_used <- marker_ihc_hec_genes_used[order(AverageExpression(eprm_T1, genes.use = marker_ihc_hec_genes_used)[,'HEC (tif)'], decreasing = T)]
+intersect(marker_ihc_hec_genes_used, geneset$pre_signature)
+
+myDotPlot(expr = eprm_T1@data, genes = marker_ihc_hec_genes_used, groupby = droplevels(eprm_T1@meta.data$Cluster_T1) ) +
+  labs(x=NULL,y=NULL)
+#ggsave(filename = "./190830_mHEC_files/hecn_dotplot.fig4A.pdf", width = 5, height = 4)
+```
+
+# Add Hecn
+## QC for Hecn
+```{r Hecn_QC}
+tmp <- load("190904_data_Hecn.Rdata")
+tmp
+annot_hecn <- subset(annot_hecn, Cluster == "GFP+")
+umi_hecn <- umi_hecn[,rownames(annot_hecn)]
+
+annot_hecn$nGene <- colSums(umi_hecn > 0)
+annot_hecn$nUMI <- colSums(umi_hecn)
+
+annot_hecn <- annot_hecn[,c("Cluster","Location","Stage", "EGFPALL", "nGene","nUMI")]
+annot_hecn$DataSet <- "NE+"
+
+annot_pk44[,c("EGFPALL")] <- NA
+annot_hecn <- rbind(annot_pk44[rownames(eprm_pk44@meta.data), colnames(annot_hecn)], annot_hecn)
+genes_hecn <- intersect(rownames(umi_hecn), rownames(umi_pk44))
+umi_hecn <- cbind(umi_pk44[genes_hecn, rownames(eprm_pk44@meta.data)], umi_hecn[genes_hecn,])
+
+annot <- subset(annot_hecn, nGene > 2000 & nUMI > 100000)
+umi <- umi_hecn[,rownames(annot)]
+nrow(annot_hecn) # 511
+nrow(annot) # 504 after qc
+nrow(annot)/nrow(annot_hecn)
+table(annot$DataSet)
+table(annot_hecn$DataSet)
+
+annot$Stage <- factor(annot$Stage, levels = c("E9.5", "E10.0", "E10.5", "E11.0"))# factor Stage
+data_color$Cluster_hecn <- setNames(c(data_color$Cluster[c("EP6", "EP3","EP5","EP4","HC3","HC2")], "grey"), 
+                                   c("vEC",'miAEC','meAEC','HEC (tif)', "NE+",'HC','Neg'))
+data_color$Location <- c(data_color$Location[c("AGM","PK44", "Body", "DA", "Neg")], HECN = "skyblue")
+data_color$Phase <- setNames(c('#F15A24','#F7931E','#FCEE21','#29ABE2'), nm = c('G2/M','S','G1','Quiescent'))# set phase colors 
+
+```
+
+```{r Hecn_egfp, fig.width=2}
+annot$EGFPALL <- log2(1e5*annot$EGFPALL/annot$nUMI+1)
+boxplot(EGFPALL~Cluster, annot, col = data_color$Cluster_hecn["NE+"], 
+        ylim = c(0,8), xlab = "NE+", ylab = "Expression")
+
+```
+
+## Dimension Reduction
+```{r Hecn_dr}
+expr <- apply(umi, 2, function(x) {
+  log2(1e5*x/sum(x) +1)
+})
+eprm_hecn <- CreateSeuratObject(raw.data = expr, min.cells = 3, min.genes = 0, meta.data = annot)
+table(eprm_hecn@meta.data$DataSet)
+
+eprm_hecn <- FindVariableGenes(eprm_hecn, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(eprm_hecn@var.genes) # 1250
+eprm_hecn <- ScaleData(eprm_hecn)
+eprm_hecn <- RunPCA(eprm_hecn, pcs.compute = 100, do.print = F, pc.genes = setdiff(eprm_hecn@var.genes, ""))
+PCElbowPlot(eprm_hecn, num.pc = 50)
+eprm_hecn <- RunTSNE(eprm_hecn, dims.use = 1:15)
+eprm_hecn@meta.data$Cluster_hecn <- eprm_hecn@meta.data$DataSet
+eprm_hecn@meta.data[rownames(eprm_pk44@meta.data), "Cluster_hecn"] <- plyr::mapvalues(as.character(eprm_pk44@meta.data$Cluster_new), c("HEC", "PK44"), c("HEC (tif)","HEC (tif)"))
+eprm_hecn@meta.data$Cluster_hecn <- factor(eprm_hecn@meta.data$Cluster_hecn, levels = c("vEC",'miAEC','meAEC','HEC (tif)', "NE+",'HC'))
+
+eprm_hecn <- AddCCscore(eprm_hecn, th.g1s = 2, th.g2m = 2, g1s.genes = geneset$g1s, g2m.genes = geneset$g2m, 
+                        add.dr = T, use.scale = F, gene.max = NULL)
+```
+
+## Plot cell labels on tSNE
+```{r Hecn_tsne_category, fig.height=2.5}
+DimPlot(eprm_hecn, reduction.use = 'tsne', group.by = 'Location', cols.use = data_color$Location, pt.size = 2, do.return = T) +
+  coord_fixed(ratio = 1/1.2)
+DimPlot(eprm_hecn, reduction.use = 'tsne', group.by = 'Stage', cols.use = data_color$Stage, pt.size = 2, do.return = T) +
+  coord_fixed(ratio = 1/1.2)
+DimPlot(eprm_hecn, reduction.use = 'tsne', group.by = 'Phase', cols.use = data_color$Phase, pt.size = 2, do.return = T) +
+  coord_fixed(ratio = 1/1.2)
+DimPlot(eprm_hecn, reduction.use = 'tsne', group.by = 'Cluster_hecn', cols.use = data_color$Cluster_hecn, pt.size = 2, do.return = T) +
+  coord_fixed(ratio = 1/1.2)
+
+```
+
+## lightening plot
+```{r Hecn_tsne_markers, fig.width=6, fig.height=5}
+boxFeaturePlot(eprm_hecn, features.plot = c("Kit", "Runx1", "Procr", "Gfi1", "Cd44", "Neurl3"), 
+               nCol = 3, coord.fixed = 1/1.2, pt.size = 2)
+```
+
+## dotplot HECN-GFP+ cells
+```{r Hecn_vln_markers, fig.width=5.5, fig.height=4.5}
+#cells_tmp <- rownames(eprm_hecn@meta.data)[eprm_hecn@meta.data$Cluster_hecn %in% c("miAEC", "HEC (tif)", "NE+")]
+myDotPlot(eprm_hecn@data, 
+          c("Hlf","Gfi1", "Neurl3", "Nupr1", 'Bcl11a',"Runx1","Adgrg1","Ikzf2",  'Angpt1',  "Mycn", "Cd44","Procr", "Kit"),
+          groupby = factor(droplevels(eprm_hecn@meta.data[, "Cluster_hecn"]), 
+                           levels = c("vEC","miAEC","meAEC", "NE+", "HEC (tif)","HC")))
+#ggsave(filename = "./190830_mHEC_files/hecn_dotplot_fig4f.pdf", width = 5.5, height = 4.5)
+eprm_hecn <- SetAllIdent(eprm_hecn, id = "Cluster_hecn")
+hecn_avg_data <- t(apply(eprm_hecn@data, 1, function(x){
+  tapply(x, list(eprm_hecn@meta.data$Cluster_hecn), mean)
+}))
+# hecn_avg_data <- AverageExpression(eprm_hecn, use.scale = F, use.raw = F)
+#plot(hclust(as.dist((1-cor(hecn_avg_data[setdiff(eprm_hecn@var.genes, go_ccgenes),]))/2), method = "average"))
+pheatmap(cor(hecn_avg_data[setdiff(eprm_hecn@var.genes, go_ccgenes),]), 
+         clustering_method = "average")
+# hecn_avg_data <- AveragePCA(eprm_hecn)
+# pheatmap(cor(hecn_avg_data[]), breaks = seq(-0.6,1,length.out = 15),
+         # color = bluered(14), clustering_method = "average")
+```
+
+## lightening plot EGFP
+```{r Hecn_tsne_egfp, fig.width=2, fig.height=2.5}
+eprm_hecn_tmp <- eprm_hecn
+eprm_hecn_tmp@data <- rbind(eprm_hecn@data, EGFPALL=ifelse(is.na(eprm_hecn@meta.data$EGFPALL), 0, eprm_hecn@meta.data$EGFPALL))
+boxFeaturePlot(eprm_hecn_tmp, features.plot = "EGFPALL",nCol = 1, coord.fixed = 1/1.2, pt.size = 2)
+```
+## correlation EGFP
+```{r Hecn_egfp_cor, fig.width=3, fig.height=2.5}
+egfp_ggData <- as.data.frame(t(eprm_hecn_tmp@data[c("Runx1", "EGFPALL", "Neurl3"),!is.na(eprm_hecn_tmp@meta.data$EGFPALL)]))
+ggscatter(egfp_ggData, x = "EGFPALL", y = c("Runx1", "Neurl3"),
+          color = "black",cor.coef = T, cor.coef.coord = c(4,7),  cor.coeff.args	=list(color = "blue"),
+          add = "reg.line", conf.int = T, add.params = list(color = "red"), xlab = "NE+") 
+```
+
+## G1S vs G2/M plot 
+```{r Hecn_cc,fig.width=4}
+ggplot(eprm_hecn@meta.data) +
+  geom_point(mapping = aes(G1S.Score, G2M.Score, color = Cluster_hecn)) +
+  scale_color_manual(values = data_color$Cluster_hecn) +
+  geom_segment(mapping = aes(2,0,xend = 2,yend = 2)) +
+  geom_segment(mapping = aes(0,2,xend = 5,yend = 2)) +
+  geom_segment(mapping = aes(2,2,xend = 5,yend = 5)) +
+  coord_fixed(ratio = 1, expand = F, xlim = c(0,4.5))
+
+table(droplevels(eprm_hecn@meta.data[,c("Cluster_hecn", "Phase")]))
+  
+# cc
+ggData <- melt(table(droplevels(eprm_hecn@meta.data[,c('Cluster_hecn', 'Phase')])))
+ggData$Phase <- factor(ggData$Phase, levels = c("G2/M", 'S', 'G1', 'Quiescent'))
+ggData <- subset(ggData, Cluster_hecn %in% c("miAEC", "NE+", "HEC (tif)"))
+ggData$Cluster_hecn <- factor(as.character(ggData$Cluster_hecn), levels = c("miAEC", "NE+", "HEC (tif)"))
+ggplot(ggData) +
+  geom_bar(mapping = aes(Cluster_hecn, value, fill = Phase), stat = 'identity', position = 'fill') +
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_manual(values = data_color$Phase) +
+  scale_y_continuous(expand = c(0,0), 
+                     labels = scales::percent(seq(0, 1, 0.25)))+
+  labs(x = NULL, y = "Percentage") 
+# ggsave(filename = "./190830_mHEC_files/hecn_cc.pdf", width = 4, height = 3)
+
+```
+save eprm_hecn and data_color (code not run)
+```{r eval=FALSE}
+save(eprm_hecn, data_color, file = "./190830_mHEC_data/seurat.eprm_hecn.data_color.Rdata")
+```
+
+# Add early
+add cell from Body at E8.0, E8.5 and E9.0,
+## QC for MAIN+early+T1
+```{r QC_early}
+tmp <- load("190915_data_early.Rdata")
+
+annot_early$nGene <- colSums(umi_early > 0)
+annot_early$nUMI <- colSums(umi_early)
+
+annot_early <- rbind(annot_main, annot_early)
+umi_early <- cbind(umi_main, umi_early)
+
+
+
+table(annot_early[,c("Stage","Location")])
+
+annot <- subset(annot_early, nGene > 2000 & nUMI > 100000)
+umi <- umi_early[,rownames(annot)]
+nrow(annot_early) 
+nrow(annot) 
+nrow(annot)/nrow(annot_early)
+table(annot$DataSet)
+table(annot_early$DataSet)
+
+annot$Stage <- factor(annot$Stage, levels = c("E8.0","E8.5","E9.0","E9.5", "E10.0", "E10.5", "E11.0")) # factor Stage
+data_color$Cluster_early <- setNames(c(data_color$Cluster[c("EP6","EP1", "PK44", "EP3","EP5","EP4",'YS2',"HC1")], "grey"), 
+                                   c("vEC","pEC","pAEC",'miAEC','meAEC','HEC','T1 pre-HSC','HC','Neg'))
+pattern_colors <- setNames(object = RColorBrewer::brewer.pal(10, "Paired")[c(2,4,6,8,10)], nm = paste0("P", 1:5))
+
+```
+
+## Dimension Reduction
+```{r early_dr}
+expr <- apply(umi, 2, function(x) {
+  log2(1e5*x/sum(x) +1)
+})
+ep_early <- CreateSeuratObject(raw.data = expr, min.cells = 3, min.genes = 0, meta.data = annot)
+# Filter cells expressing Ptprc (CD45) and Spn (CD43) (log2(TPM/10+1) > 1)
+table(ep_early@meta.data$DataSet)
+
+ep_early <- FindVariableGenes(ep_early, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(ep_early@var.genes) # 1267
+ep_early <- ScaleData(ep_early, do.center = T, do.scale = T)
+hvgs_early <- setdiff(ep_early@var.genes, go_ccgenes)
+ep_early <- RunPCA(ep_early, pcs.compute = 100, do.print = F, pc.genes = hvgs_early)
+PCElbowPlot(ep_early, num.pc = 50)
+ep_early <- RunTSNE(ep_early, dims.use = 1:15)
+ep_early <- FindClusters(ep_early, dims.use = 1:15, force.recalc = T, print.output = F, resolution = 1)
+DimPlot(ep_early, reduction.use = 'tsne', pt.size = 2, do.return = T, do.label = T) +
+  coord_fixed(1/1.3) 
+ep_early@meta.data$Cluster_early <- plyr::mapvalues(ep_early@ident, from = 0:9, 
+                                                    to = c("vEC", "pEC", "pAEC", "Neg", "meAEC","HEC", "Neg","miAEC","HC", "Neg"))
+ep_early@meta.data$Cluster_early <- as.character(ep_early@meta.data$Cluster_early)
+ep_early@meta.data$Cluster_early[ep_early@meta.data$Location == "Neg"] <- "Neg"
+ep_early@meta.data$Cluster_early <- factor(ep_early@meta.data$Cluster_early, levels = c("vEC","pEC","pAEC",'miAEC','meAEC','HEC','HC','Neg'))
+
+
+ep_early <- AddCCscore(ep_early, th.g1s = 2, th.g2m = 2, g1s.genes = geneset$g1s, g2m.genes = geneset$g2m, 
+                        add.dr = T, use.scale = F, gene.max = NULL)
+
+ep_early@meta.data$Cluster_ep <- "Others"
+ep_early@meta.data[rownames(ep@meta.data),"Cluster_ep"] <- as.character(ep@meta.data$Cluster_new)
+ep_early@meta.data$Cluster_ep <- factor(ep_early@meta.data$Cluster_ep, levels = c("vEC",'miAEC','meAEC','HEC','HC','Neg',"Others"))
+table(ep_early@meta.data$Cluster_ep, ep_early@meta.data$Cluster_early)
+```
+## DotPlot of selected Markers 
+```{r early_vln_markers, fig.width=6, fig.height=3.5}
+ep_early_markers <- c("Pecam1", 'Cdh5', 'Ptprc','Nr2f2','Etv2','Gja5','Ltbp4','Runx1', 'Kit','Itga2b','Spn')
+myDotPlot(ep_early@data, genes = ep_early_markers, groupby = ep_early@meta.data$Cluster_early) + labs(x = NULL, y =NULL)
+# stackedViolinPlot(expr_matrix = ep_early@data, ep_early_markers, ep_early@meta.data, 
+#                   group.by = 'Cluster_new', cols.use = data_color$Cluster_new, ncol = 5) +
+#   labs(x = NULL)
+#ggsave(filename = "D:/307Hospital/Workspace/EC-RNA-Seq/HEC190324/191219 HEC-CR/Response/addearly_dotplot.pdf", width = 6, height = 3.5)
+```
+
+## Plot cell labels on tSNE
+```{r early_tsne_category,fig.height=2.5}
+DimPlot(ep_early, reduction.use = 'tsne', group.by = 'Location', cols.use = data_color$Location, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.3) 
+DimPlot(ep_early, reduction.use = 'tsne', group.by = 'Stage', cols.use = data_color$Stage, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.3) 
+DimPlot(ep_early, reduction.use = 'tsne', group.by = 'Phase', cols.use = data_color$Phase,pt.size = 2, do.return = T) +
+  coord_fixed(1/1.3) 
+DimPlot(ep_early, reduction.use = 'tsne', group.by = 'Cluster_early', cols.use = data_color$Cluster_early, pt.size = 2, do.return = T) +
+  coord_fixed(1/1.3) 
+DimPlot(ep_early, reduction.use = 'tsne', group.by = 'Cluster_ep', cols.use = data_color$Cluster_early, pt.size = 2, do.return = T
+        #, plot.order = c("vEC",'miAEC','meAEC','HEC','HC',"Neg")
+        ) +
+  coord_fixed(1/1.3) 
+#ggsave(filename = "./190830_mHEC_files/early_tsne_cluster_old.pdf", width = 4, height = 2.5)
+```
+
+## Mpath
+```{r early_mpath, eval=F}
+ep_early_mpath <- SubsetData(ep_early, cells.use = rownames(subset(ep_early@meta.data, Cluster_early %in% c("pEC","vEC","pAEC","miAEC","meAEC", "HEC")  & ep_early@data["Ptprc",] < 1 & ep_early@data["Spn",] < 1 )), subset.raw = T)
+ep_early_mpath <- FindVariableGenes(ep_early_mpath, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+
+neighbor_network <- build_network(exprs = ep_early_mpath@data[ep_early_mpath@var.genes,],
+                                  landmark_cluster = data.frame(cells = rownames(ep_early_mpath@meta.data),
+                                                                clusters = ep_early_mpath@meta.data$Cluster_early),
+                                  baseName = "early_mpath")
+
+### TrimNet: trim edges of lower weights
+trimmed_net <- trim_net(neighbor_network,textSize=30,
+                        baseName = "early_mpath",
+                        method = "TrimNet",
+                        start = "pEC")
+
+```
+
+## ep_early_pt
+```{r early_sub, fig.width=4, fig.height=3}
+cells_ep_early_sub <- rownames(subset(ep_early@meta.data, Cluster_early %in% c("pEC","pAEC","miAEC","HEC") & ep_early@data["Ptprc",] < 1 & ep_early@data["Spn",] < 1 ))
+cells_t1 <- rownames(subset(eprm_T1@meta.data, Cluster_T1 == "T1 pre-HSC"))
+
+annot_early_pt <- rbind(annot_early[cells_ep_early_sub,], annot_T1[cells_t1,])
+annot_early_pt$Cluster_early <- factor(c(as.character(ep_early@meta.data[cells_ep_early_sub, "Cluster_early"]), as.character(eprm_T1@meta.data[cells_t1, "Cluster_T1"])), levels = c("pEC","pAEC","miAEC","HEC", "T1 pre-HSC"))
+umi_early_pt <- cbind(umi_early[,cells_ep_early_sub], umi_T1[,cells_t1])
+
+ep_early_pt <- CreateSeuratObject(raw.data = 
+                                 apply(umi_early_pt, 2, function(x) {log2(1e5*x/sum(x) +1)}), 
+                               min.cells = 3, min.genes = 0, meta.data = annot_early_pt)
+table(ep_early_pt@meta.data$DataSet)
+ep_early_pt <- FindVariableGenes(ep_early_pt, x.low.cutoff = 1, x.high.cutoff = 8, y.cutoff = 1)
+length(ep_early_pt@var.genes) # 1267
+ep_early_pt <- ScaleData(ep_early_pt, do.center = T, do.scale = T)
+hvgs_early_sub <- setdiff(ep_early_pt@var.genes, "")
+ep_early_pt <- RunPCA(ep_early_pt, pcs.compute = 100, do.print = F, pc.genes = hvgs_early_sub )
+DimPlot(ep_early_pt, reduction.use = 'pca', group.by = 'Cluster_early', cols.use = data_color$Cluster_early, pt.size = 2, do.return = T) +
+  coord_fixed(1) 
+DimPlot(ep_early_pt, reduction.use = 'pca', group.by = 'Stage', cols.use = data_color$Stage, pt.size = 2, do.return = T) +
+  coord_fixed(1)
+
+```
+## PCA specification
+```{r early_pca_specification, fig.width=8, fig.height=6, eval=F, include=F}
+ep_early_pt <- ProjectPCA(ep_early_pt, do.print = F, do.center = T)
+topn <- 50
+pc1_neg <- PCTopGenes(ep_early_pt, pc.use = 1, num.genes = 2*topn, use.full = T, do.balanced = T)[1:topn]
+early_phdata1 <- ep_early_pt@scale.data[pc1_neg, order(ep_early_pt@dr$pca@cell.embeddings[,"PC1"])]
+early_phdata1 <- ep_early_pt@scale.data[pc1_neg, order(cds_pt_early@phenoData@data$Pseudotime)]
+pheatmap(early_phdata1, 
+         cluster_rows = F, cluster_cols = F, show_colnames = F, 
+         annotation_col = ep_early_pt@meta.data[,c("Cluster_early"), drop = F], 
+         annotation_colors = data_color)
+
+pc2_pos <- rev(PCTopGenes(ep_early_pt, pc.use = 2, num.genes = 2*topn, use.full = T, do.balanced = T)[(1+topn):(2*topn)])
+early_phdata1 <- ep_early_pt@scale.data[pc2_pos, order(ep_early_pt@dr$pca@cell.embeddings[,"PC1"])]
+early_phdata1 <- ep_early_pt@scale.data[pc2_pos, order(cds_pt_early@phenoData@data$Pseudotime)]
+pheatmap(early_phdata1, 
+         cluster_rows = F, cluster_cols = F, show_colnames = F, 
+         annotation_col = ep_early_pt@meta.data[,c("Cluster_early"), drop = F], 
+         annotation_colors = data_color)
+
+
+```
+## monocle 2
+```{r early_monocle, fig.height=4, fig.width=3}
+pd <- new("AnnotatedDataFrame", data = ep_early_pt@meta.data)
+fd <- new("AnnotatedDataFrame", data = data.frame(gene_short_name = rownames(umi_early_pt),
+                                                  row.names = rownames(umi_early_pt)))
+
+cds_pt_early <- newCellDataSet(as.matrix(umi_early_pt), phenoData = pd, featureData = fd, expressionFamily=negbinomial())
+cds_pt_early <- estimateSizeFactors(cds_pt_early)
+cds_pt_early <- estimateDispersions(cds_pt_early)
+disp_table <- dispersionTable(cds_pt_early)
+ordering_genes <- subset(disp_table,
+#                         mean_expression >= 1 &
+                           dispersion_empirical >= 1.5 * dispersion_fit)$gene_id
+ordering_genes <- setdiff(ordering_genes, go_ccgenes)
+cds_pt_early <- setOrderingFilter(cds_pt_early, ordering_genes)
+cds_pt_early <- reduceDimension(cds_pt_early, reduction_method = "DDRTree")
+cds_pt_early <- orderCells(cds_pt_early)
+plot_cell_trajectory(cds_pt_early, color_by = "State")
+cds_pt_early <- orderCells(cds_pt_early, root_state = 1)
+
+plot_cell_trajectory(cds_pt_early, color_by = "Pseudotime", 
+                     show_branch_points = F, theta = 0) + coord_fixed(ratio = 1/0.6) +
+  scale_color_gradientn(colours =  RColorBrewer::brewer.pal(5,"Spectral"))
+
+plot_cell_trajectory(cds_pt_early, color_by = "Cluster_early", 
+                     show_branch_points = F, theta = 0) + 
+  scale_color_manual(values = data_color$Cluster_early) + coord_fixed(ratio = 1/0.6)
+#plot_cell_trajectory(cds_pt_early, color_by = "Cluster_hec")
+plot_cell_trajectory(cds_pt_early, color_by = "Location",
+                     show_branch_points = F, theta = 0) +
+  scale_color_manual(values = data_color$Location) + coord_fixed(ratio = 1/0.6)
+plot_cell_trajectory(cds_pt_early, color_by = "Stage",
+                     show_branch_points = F, theta = 0) +
+  scale_color_manual(values = data_color$Stage) + coord_fixed(ratio = 1/0.6)
+
+
+# (cds_pt_early@phenoData@data$Pseudotime[which.max(t(cds_pt_early@reducedDimS)[,1])] - cds_pt_early@phenoData@data$Pseudotime[which.min(t(cds_pt_early@reducedDimS)[,2])])/(max(t(cds_pt_early@reducedDimS)[,2]) - min(t(cds_pt_early@reducedDimS)[,2]))
+
+# (cds_pt_early@phenoData@data$Pseudotime[which.max(t(cds_pt_early@reducedDimS)[,1])] - cds_pt_early@phenoData@data$Pseudotime[which.min(t(cds_pt_early@reducedDimS)[,1])])/(max(t(cds_pt_early@reducedDimS)[,1]) - min(t(cds_pt_early@reducedDimS)[,1]))
+```
+
+## proportion
+```{r early_proportion_stage, fig.width=6, fig.height=2.5}
+# proportion ribbon
+ggPropData <- as.data.frame(droplevels(cds_pt_early@phenoData@data[,c("Stage", "Pseudotime")]))
+ggPropData$Stage <- factor(ggPropData$Stage, levels = c("E8.0","E8.5", "E9.0", "E9.5", "E10.0", "E10.5", "E11.0"))
+ggPropData <- na.omit(ggPropData)
+
+table(cds_pt_early@phenoData@data[,c("Stage", "Cluster_early")])
+#write.csv(table(cds_pt_early@phenoData@data[,c("Stage", "Cluster_early")]), file = "./190830_mHEC_files/early_stage_cluster.table.csv")
+ggplot(data = ggPropData) +
+  geom_density(mapping = aes(Pseudotime, stat(scaled), 
+                             fill = Stage), 
+               position = 'fill', 
+               bw = 'nrd0', n=20,
+               kernel = 'gaussian') +
+  scale_fill_manual(values = data_color$Stage) +
+  labs(x = "Pseudotime", y = "Proportion")
+#ggsave(filename = "./190830_mHEC_files/early_monocle.prop.stage.pdf", width = 6, height = 2.5)
+ggPropData <- as.data.frame(droplevels(cds_pt_early@phenoData@data[,c("Cluster_early", "Pseudotime")]))
+ggplot(data = ggPropData) +
+  geom_density(mapping = aes(Pseudotime, stat(scaled), 
+                             fill = Cluster_early), 
+               position = 'fill', 
+               bw = 'nrd0', n=20,
+               kernel = 'gaussian') +
+  scale_fill_manual(values = data_color$Cluster_early) +
+  labs(x = "Pseudotime", y = "Proportion")
+```
+
+
+## SCENIC
+run SCENIC on the server and back here
+```{r early_scenic, eval = F}
+######
+# Prepare data for SCENIC
+# annot <- ep_early_pt@meta.data
+# expr <- as.matrix(ep_early_pt@data)
+# genesKept = rownames(expr)[rowSums(expr > 1) > 5]
+# expr <-as.matrix(expr[genesKept,])
+# cellInfo <- annot[,c("Location", "Stage", "Cluster_early")]
+# colVars <- data_color[colnames(cellInfo)]
+# save(expr, cellInfo, colVars, file = "./190830_mHEC_data/SCENIC/input.Rdata")
+
+# go to scenic-pureR and then back here
+```
+
+## Pattern
+### Pattern genes
+use ANOVA to identify variable genes
+```{r early_aov, eval = F}
+genes.ave.early <- apply(ep_early_pt@data, 1, function(x){ max(tapply(x, list(as.character(ep_early_pt@meta.data$Cluster_early)), mean))})
+##### p value and fc
+genes.aov.early.annot <- t(apply(ep_early_pt@data, 1, function(x){
+  tmp <- aov(Expression ~ Cluster, data.frame(Cluster = ep_early_pt@meta.data$Cluster_early, Expression = x))
+  tmp1 <- TukeyHSD(tmp, ordered = F)
+  c(summary(tmp)[[1]][1,"Pr(>F)"], tmp1$Cluster[,"diff"], tmp1$Cluster[,"p adj"])
+}))
+colnames(genes.aov.early.annot) <- paste0(c("early.ANOVA.pvalue", rep("diff.", 10), rep("padj.", 10)), colnames(genes.aov.early.annot))
+genes.aov.early.annot <- as.data.frame(genes.aov.early.annot)
+########
+genes.aov.early.annot$early.ANOVA.padj <- p.adjust(genes.aov.early.annot[,1], method = "BH")
+genes.aov.early.annot$early.meanMax <- genes.ave.early
+genes.aov.early.annot$gene <- rownames(genes.aov.early.annot)
+
+idConvert <- bitr(geneID = genes.aov.early.annot$gene, "SYMBOL", 'ENTREZID', org.Mm.eg.db)
+genes.aov.early.annot$geneID <- idConvert$ENTREZID[match(genes.aov.early.annot$gene, idConvert$SYMBOL)]
+
+genes.aov.early.annot$TF <- ifelse(genes.aov.early.annot$gene %in% geneset$tf_mmu$Symbol,"isTF", "not")
+genes.aov.early.annot$Cytokine <- ifelse(genes.aov.early.annot$gene %in% Hmisc::capitalize(tolower(geneset$cytokine_growthfactor)),  "isCytokine", "not")
+
+save(genes.aov.early.annot, file = "./190830_mHEC_data/genes.aov.early.annot.Rdata")
+```
+
+### Pattern genes sig
+using consensus clustering to determine the number of patterns 
+```{r early_aov_sig, fig.width=8, fig.height=8, eval = T}
+load("./190830_mHEC_data/genes.aov.early.annot.Rdata")
+comparisons <- gsub(pattern = "diff.",replacement = "", colnames(genes.aov.early.annot)[2:11])
+padj.pair.th <- 0.05
+fc.pair.th <- log2(2)
+comparisons_sign <- list()
+for(i in comparisons){
+  comparisons_sign[[i]] <- abs(genes.aov.early.annot[,paste0('diff.', i)]) > fc.pair.th & genes.aov.early.annot[,paste0("padj.", i)] < padj.pair.th
+  #genes.aov.early.annot[,paste0("sign.",i)] <- comparisons_sign[[i]]
+}
+
+genes.aov.early.annot.sig <- subset(genes.aov.early.annot, 
+                                     early.ANOVA.padj < 0.05 & Reduce(f = function(x,y) x|y, x = comparisons_sign))
+
+
+top500.genes <- rownames(genes.aov.early.annot.sig[order(genes.aov.early.annot.sig$early.ANOVA.padj),])[1:500]
+
+phData1 <- ep_early_pt@data[top500.genes, order(cds_pt_early$Pseudotime), drop = F]
+phData2 <- ep_early_pt@scale.data[top500.genes,  order(cds_pt_early$Pseudotime), drop = F]
+phData3 <- MinMax(phData2, max = 2, min = -2)
+
+# top500_hc <- ConsensusClusterPlus(d = t(phData2), maxK = 15, reps = 100, clusterAlg = "hc", distance = "pearson",
+#                                   innerLinkage = "ward.D", finalLinkage = 'average',
+#                                   title = "early.top500.hc.consensus", seed = 666, plot = "pdf")
+top500_km <- ConsensusClusterPlus(d = t(phData2), maxK = 15, reps = 100, clusterAlg = "km", distance = "euclidean",
+                                  #innerLinkage = "ward.D", finalLinkage = 'average',
+                                  title = "early.top500.km.consensus", seed = 666, plot = "pdf")
+
+gene_clusters <- top500_km[[5]]$consensusClass
+
+genes.aov.early.annot.sig$Pattern <- NA; 
+#genes.aov.early.annot.sig[names(gene_clusters), "Pattern"] <- paste0("P",plyr::mapvalues(gene_clusters, c(1:9), 1:9))
+
+genes.aov.early.annot.sig[names(gene_clusters), "Pattern"] <- paste0("P",plyr::mapvalues(gene_clusters, c(3,5,4,2,1), 1:5))
+genes.aov.early.annot.sig$PatternAll <- corClassifier(ep_early_pt@scale.data[top500.genes,], 
+                                                  class = genes.aov.early.annot.sig[top500.genes,"Pattern"], 
+                                                  new_data = ep_early_pt@scale.data[genes.aov.early.annot.sig$gene,],
+                                                  bycol = F)
+
+### sample cells
+early_cells_used <- unlist(sample_cluster_cells(rownames(ep_early_pt@meta.data), as.character(ep_early_pt@meta.data$Cluster_early), n = 60, seed = 666))
+
+pheatmap::pheatmap(rowSmooth(MinMax(phData2, max = 2, min = -2)[order(genes.aov.early.annot.sig[rownames(phData3),"Pattern"],
+                                                                      genes.aov.early.annot.sig[rownames(phData3), "early.ANOVA.pvalue"]),
+                                                                colnames(phData2) %in% early_cells_used],
+                             n = 25),
+                   cluster_rows = F,
+                   color = colorRampPalette(c("darkblue","skyblue","grey90","orange","brown"))(100),
+                   cluster_cols = F,
+                   annotation_col = cds_pt_early@phenoData@data[,c("Cluster_early", "Stage","Pseudotime")], 
+                   annotation_colors = c(data_color,
+                                         list(TF = c(isTF = "black", not="white"),
+                                              PatternAll = pattern_colors,
+                                              Cytokine = c(isCytokine = "red", not = "white"))),
+                   annotation_row = genes.aov.early.annot.sig[,c("TF","Cytokine", "Pattern")],
+                   show_colnames = F, show_rownames = F)
+
+phData4 <- ep_early_pt@scale.data[genes.aov.early.annot.sig$gene,  order(cds_pt_early$Pseudotime), drop = F]
+phData5 <- MinMax(phData4, max = 2, min = -2)
+pheatmap::pheatmap(rowSmooth(phData5[order(genes.aov.early.annot.sig[rownames(phData5),"PatternAll"]),
+                                     colnames(phData5) %in% early_cells_used], n = 25),
+                   cluster_rows = F,
+                   color = colorRampPalette(c("darkblue","skyblue","grey90","orange","brown"))(100),
+                   cluster_cols = F,
+                   annotation_col = cds_pt_early@phenoData@data[,c("Cluster_early", "Stage","Pseudotime")], 
+                   annotation_colors = c(data_color,
+                                         list(TF = c(isTF = "black", not="white"),
+                                              PatternAll = pattern_colors,
+                                              Cytokine = c(isCytokine = "red", not = "white"))),
+                   annotation_row = genes.aov.early.annot.sig[,c("TF","Cytokine", "PatternAll")],
+                   show_colnames = F, show_rownames = F
+                   #, filename = "./190830_mHEC_files/early_pattern_heatmap.pdf", width = 8, height = 8
+                   )
+# TFs
+phData6 <- MinMax(phData4[genes.aov.early.annot.sig$gene[genes.aov.early.annot.sig$TF == "isTF"],], max = 2, min = -2)
+pheatmap::pheatmap(phData6[order(genes.aov.early.annot.sig[rownames(phData6),"PatternAll"], 
+                                           genes.aov.early.annot.sig[rownames(phData6), "early.ANOVA.pvalue"]),
+                           colnames(phData6) %in% early_cells_used],
+                   cluster_rows = F,
+                   color = colorRampPalette(c("darkblue","skyblue","grey90","orange","brown"))(100),
+                   cluster_cols = F,
+                   annotation_col = cds_pt_early@phenoData@data[,c("Cluster_early", "Stage","Pseudotime")], 
+                   annotation_colors = c(data_color,
+                                         list(TF = c(isTF = "black", not="white"), 
+                                              PatternAll = pattern_colors,
+                                              Cytokine = c(isCytokine = "red", not = "white"))),
+                   annotation_row = genes.aov.early.annot.sig[,c("TF","Cytokine", "PatternAll")],
+                   show_colnames = F, show_rownames = F)
+```
+
+### Pattern diagram
+```{r early_pattern_diagram, eval=, fig.height=2.5, fig.width=4, message=FALSE, warning=FALSE}
+### diagram
+phggData <- melt(ep_early_pt@data[top500.genes,], 
+                 varnames = c("Gene","Cell"), value.name = "Expression", as.is = F)
+phggData <- subset(phggData, Cell %in% early_cells_used)
+
+phggData$Pattern <- plyr::mapvalues(phggData$Gene, genes.aov.early.annot.sig$gene, genes.aov.early.annot.sig$PatternAll, warn_missing = F)
+# phggData$TF <- ifelse(phggData$Gene %in% geneset$tf_mmu$Symbol, "isTF", 'not')
+# phggData$Rank <- plyr::mapvalues(as.character(phggData$Cell), colnames(cds_pt_early), rank(cds_pt_early$Pseudotime)); 
+phggData$Rank <- plyr::mapvalues(as.character(phggData$Cell), early_cells_used, rank(cds_pt_early@phenoData@data[early_cells_used,"Pseudotime"])); 
+phggData$Rank <- as.numeric(phggData$Rank)
+
+phggData$loess <- NA
+for(g in unique(sort(phggData$Gene))){
+  phggData_sub <- subset(phggData, Gene == g)
+  g.res <- predict(loess(Expression~Rank, phggData_sub, span = 0.5))
+  phggData[phggData$Gene == g,c("loess")] <- g.res
+}
+
+phggData$Pattern <- factor(phggData$Pattern, levels = paste0("P", 1:5))
+phggData$Cluster <- cds_pt_early@phenoData@data[phggData$Cell, "Cluster_early"]; 
+
+ggplot(mapping = aes(Rank, loess, color = Pattern), data = phggData) +
+  geom_smooth(se = F) + 
+  scale_color_manual(values = pattern_colors) +
+    geom_vline(xintercept = 60, linetype = 2) +
+    geom_vline(xintercept = 120, linetype = 2) +
+    geom_vline(xintercept = 180, linetype = 2)+
+    geom_vline(xintercept = 220, linetype = 2) +
+  labs(x = "Rank", y = "Expression (loess)", title = "Patterns")
+
+table(genes.aov.early.annot.sig$PatternAll, genes.aov.early.annot.sig$TF)
+
+# ggsave(filename = "./190830_mHEC_files/early_patterh_diagram.pdf", width = 6, height = 2.5)
+
+```
+
+### Pattern Enrichment Terms
+```{r early_pattern_enrich0, fig.width=8, fig.height=6, eval = F}
+# pattern go enrichment
+genes.aov.early.annot.sig.go <- genes.aov.early.annot.sig %>% group_by(PatternAll) %>% top_n(300, -early.ANOVA.pvalue)
+comres_bp <- compareCluster(geneID~PatternAll, data = na.omit(genes.aov.early.annot.sig.go[,c("geneID", 'PatternAll')]), 
+                         OrgDb = org.Mm.eg.db, ont = "BP")
+comres_bp_sim <- simplify(comres_bp)
+dotplot(comres_bp_sim, title = "GO:BP enrichment results", showCategory = 6)
+#ggsave(filename = "./190830_mHEC_files/early_pattern_goenrich.pdf", width = 8, height = 6)
+
+comres_kegg <- compareCluster(geneID~PatternAll, data = na.omit(genes.aov.early.annot.sig.go[,c("geneID", 'PatternAll')]), 
+                          fun = "enrichKEGG",organism = "mmu", use_internal_data = T)
+dotplot(comres_kegg, title = "KEGG enrichment results", showCategory = 6)
+#ggsave(filename = "./190830_mHEC_files/early_pattern_kegg.pdf", width = 8, height = 6)
+save(comres_bp_sim, comres_kegg, file = "190830_mHEC_data/compareCluster.res.p5.Rdata")
+```
+```{r early_pattern_enrich1, fig.width=8, fig.height=6, eval = T}
+# pattern go enrichment
+load("190830_mHEC_data/compareCluster.res.p5.Rdata") # top200 is good
+dotplot(comres_bp_sim, title = "GO:BP enrichment results", colorBy = "pvalue")
+dotplot(comres_kegg, title = "KEGG enrichment results")
+```
+
+### Pattern Pathway GSVA
+```{r early_pattern_gsva, fig.width=10, fig.height=8, eval = F}
+######################
+# Section GSVA
+############
+# Mm.gage.kegg <- kegg.gsets(species = "mmu", id.type = "entrez")
+# idMap <- bitr(sort(unique(unname(unlist(Mm.gage.kegg)))), fromType = "ENTREZID", toType = "SYMBOL", OrgDb = "org.Mm.eg.db", drop = T)
+# Mm.gage.kegg$kg.sets <- lapply(Mm.gage.kegg$kg.sets, function(x){unique(na.omit(idMap$SYMBOL[match(x, idMap$ENTREZID)]))})
+# save(Mm.gage.kegg, file = "./190830_mHEC_data/Mm.gage.kegg.symbol.Rdata")
+
+load("./190830_mHEC_data/Mm.gage.kegg.symbol.Rdata")
+kegg_sig <- Mm.gage.kegg$kg.sets[Mm.gage.kegg$sig.idx]
+
+gsva_data <- as.matrix(ep_early_pt@data)
+gsva_data <- gsva_data[rowSums(gsva_data > 0) > 5,]
+#gsva_data <- gsva_data[ep_early_pt@var.genes,]
+
+hvgs_early_aov <- rownames(genes.aov.early.annot.sig)
+
+
+gsva_res <- gsva(gsva_data, gset.idx.list = kegg_sig, method = "ssgsea",
+                 abs.ranking = F, min.sz = 10, max.sz = 500)
+save(gsva_res, file = "./190830_mHEC_data/gsva_res.gage.kegg.Rdata")
+
+load("./190830_mHEC_data/gsva_res.gage.kegg.Rdata")
+
+gsva_sig <- FindAllGSVA(gsva.res = gsva_res, cluster.info = ep_early_pt@meta.data$Cluster_early, only.pos = T)
+gsva_sig <- gsva_sig[order(gsva_sig$cluster, gsva_sig$p_val_adj),]
+
+toppath <- unique((gsva_sig %>% group_by(cluster) %>% top_n(10, -p_val_adj))$geneset)
+
+pathData1 <- gsva_res[toppath, order(cds_pt_early$Pseudotime), drop = F]
+pathData2 <- rowSmooth(pathData1[,colnames(pathData1) %in% early_cells_used], proportion = 0.2)
+pathData3 <- MinMax(t(scale(t(pathData2))), -2, 2)
+pheatmap::pheatmap(pathData3, 
+                   cluster_rows = T, 
+                   cluster_cols = F,
+                   clustering_method = "ward.D",
+                   annotation_col = cds_pt_early@phenoData@data[,c("Cluster_early", "Pseudotime")], 
+                   annotation_colors = c(data_color, 
+                                         list(TF = c(isTF = "black", not="white"),
+                                              Cytokine = c(isCytokine = "red", not = "white"))),
+                   show_colnames = F, show_rownames = T
+                   #, filename = "./190830_mHEC_files/early_pathway.heatmap.pdf", width = 10, height = 8
+                   )
+
+```
+
+## select Pathway 
+```{r}
+# Notch, Cell Cycle, Wnt, BMP, TGF-beta, mTOR, artery
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0007219"), columns = c("SYMBOL"), keytype = "GO") # Notch signaling pathway
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0007049"), columns = c("SYMBOL"), keytype = "GO") # cell cycle
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0016055"), columns = c("SYMBOL"), keytype = "GO") # Wnt signaling pathway
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0030509"), columns = c("SYMBOL"), keytype = "GO") # BMP signaling pathway
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0007179"), columns = c("SYMBOL"), keytype = "GO") # transforming growth factor beta receptor signaling pathway
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0007049"), columns = c("SYMBOL"), keytype = "GO") # mm
+# gogenes <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0060840"), columns = c("SYMBOL"), keytype = "GO") # artery development
+
+orggenes <- list()
+orggenes[["Notch signaling pathway"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("04330"), columns = c("SYMBOL"), keytype = "PATH") 
+orggenes[["Cell cycle"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("04110"), columns = c("SYMBOL"), keytype = "PATH") 
+orggenes[["Wnt signaling pathway"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("04310"), columns = c("SYMBOL"), keytype = "PATH") 
+orggenes[["GO:BMP signaling pathway"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0030509"), columns = c("SYMBOL"), keytype = "GO") 
+orggenes[["TGF-beta signaling pathway"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("04350"), columns = c("SYMBOL"), keytype = "PATH") 
+orggenes[["mTOR signaling pathway"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("04150"), columns = c("SYMBOL"), keytype = "PATH") 
+orggenes[["GO:artery development"]] <- AnnotationDbi::select(org.Mm.eg.db, keys = c("GO:0060840"), columns = c("SYMBOL"), keytype = "GO") 
+
+ep_early_pt_tmp <- ScaleData(ep_early_pt, do.center = T, do.scale = T)
+for(i in c("Cell cycle", "GO:BMP signaling pathway","mTOR signaling pathway","GO:artery development")){
+  i_genes <- intersect(unique(orggenes[[i]]$SYMBOL), rownames(ep_early_pt_tmp@data))
+  ep_early_pt_tmp <- RunPCA(ep_early_pt_tmp, pc.genes = i_genes, do.print = F)
+  i_means <- colMeans(ep_early_pt_tmp@data[i_genes,])
+  if(cor(i_means, ep_early_pt_tmp@dr$pca@cell.embeddings[,"PC1"]) < 0){
+    ep_early_pt_tmp@dr$pca@cell.embeddings[,"PC1"] <- -ep_early_pt_tmp@dr$pca@cell.embeddings[,"PC1"]
+  }
+  ggplot(mapping = aes(rank(cds_pt_early@phenoData@data[early_cells_used, "Pseudotime"]), 
+                       ep_early_pt_tmp@dr$pca@cell.embeddings[early_cells_used, "PC1"])) +
+  geom_point(mapping = aes(color = ep_early_pt_tmp@meta.data[early_cells_used, "Cluster_early"]), 
+             show.legend = F)+
+  geom_smooth() + 
+    scale_color_manual(values = data_color$Cluster_early) +
+  labs(x = "Pseudotime", y = "PC1 loadings", title = i) +
+  theme(legend.position = "top")
+  #ggsave(filename = paste0("./190830_mHEC_files/early_path.", gsub( pattern = "[: ]", "_",i),'.pdf'), width = 4, height = 3)
+}
+
+# print(ggplot(mapping = aes(cds_pt_early$Pseudotime, ep_early_pt_tmp@data["Notch1",])) +
+# geom_point(mapping = aes(color = ep_early_pt_tmp@meta.data$Cluster_early), show.legend = F)+
+# geom_smooth() + scale_color_manual(values = data_color$Cluster_early) +
+# labs(x = "Pseudo", y = "Expression", title = "Notch1"))
+```
+## regulon filtered
+```{r early_regulon, fig.width=8,fig.height=12}
+tmp <- load("./190830_mHEC_data/SCENIC/regSet.sig.names.tf.Rdata")
+tmp
+phData7 <- MinMax(ep_early_pt@scale.data[intersect(regSet.sig.names.tf, rownames(genes.aov.early.annot.sig)),
+                                         order(cds_pt_early$Pseudotime), drop = F], max = 2, min = -2)
+# phData7 <- MinMax(ep_early_pt@data[intersect(regSet.sig.names.tf, rownames(genes.aov.early.annot.sig)),
+#                                          order(cds_pt_early$Pseudotime), drop = F], max = 8, min = 0)
+pheatmap::pheatmap(phData7[order(genes.aov.early.annot.sig[rownames(phData7),"PatternAll"], 
+                                           genes.aov.early.annot.sig[rownames(phData7), "early.ANOVA.pvalue"]),
+                           colnames(phData7) %in% early_cells_used],
+                   cluster_rows = F, 
+                   color = colorRampPalette(c("darkblue","skyblue","grey90","orange","brown"))(100),
+                   #color = colorRampPalette(rev(brewer.pal(5, "Spectral")), bias= 1.618)(100),
+                   cluster_cols = F,
+                   annotation_col = cds_pt_early@phenoData@data[,c("Cluster_early", "Stage","Pseudotime")], 
+                   annotation_colors = c(data_color,
+                                         list(TF = c(isTF = "black", not="white"), 
+                                              PatternAll = pattern_colors,
+                                              Cytokine = c(isCytokine = "red", not = "white"))),
+                   annotation_row = genes.aov.early.annot.sig[,c("PatternAll"), drop = F],
+                   show_colnames = F, show_rownames = T
+                   #, filename = "./190830_mHEC_files/early_pattern_regulon_heatmap.pdf", width = 8, height = 12
+                   )
+```
+## reported genes
+```{r early_reported, fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+##############################
+# Pattern genes
+early_markers <- sort(intersect(sort(geneset$induceTFs), rownames(genes.aov.early.annot.sig)))
+pattern_genes <- early_markers[order(genes.aov.early.annot.sig[early_markers, "PatternAll"])]
+
+pattern_genes <- c(pattern_genes, sort(setdiff(geneset$induceTFs, pattern_genes)))
+
+ggData1 <- melt(cbind(cds_pt_early@phenoData@data[early_cells_used, 
+                                                  c("Pseudotime", 'Cluster_early')],
+                     t(as.matrix(ep_early_pt@data[pattern_genes, early_cells_used]))), 
+               id.vars=c("Pseudotime", 'Cluster_early'), variable.name = "Gene", value.name = "Expression")
+ggData1$Pattern <- plyr::mapvalues(ggData1$Gene, genes.aov.early.annot.sig$gene, genes.aov.early.annot.sig$PatternAll)
+
+ggplot(data = ggData1, mapping = aes(rank(Pseudotime), Expression)) +
+  geom_point(aes(color = Cluster_early), size = 0.1) +
+  geom_smooth(method = 'loess') +
+  facet_wrap(Pattern~Gene, nrow = 4, scales = 'fixed', dir= 'h') +
+  scale_color_manual(values = data_color$Cluster_early) +
+  theme(legend.position = 'bottom') +
+  labs(x = "Pseudotime order") +
+  ylim(c(0,8))
+
+#ggsave(filename = "./190830_mHEC_files/Pattern_genes.select2.2.pdf", width = 8, height = 6)
+```
+
+```{r early_reported2, fig.width=8,fig.height=3.5, eval=F, include=F}
+### 
+other_genes <- setdiff(geneset$induceTFs, pattern_genes)
+
+ggData2 <- melt(cbind(cds_pt_early@phenoData@data[,c("Pseudotime", 'Cluster_early')],
+                     t(as.matrix(ep_early_pt@data[other_genes,]))), 
+               id.vars=c("Pseudotime", 'Cluster_early'), variable.name = "Gene", value.name = "Expression")
+
+ggplot(data = ggData2, mapping = aes(rank(Pseudotime), Expression)) +
+  geom_point(aes(color = Cluster_early), size = 0.1) +
+  geom_smooth(method = 'loess', span = 2) +
+  facet_wrap(~Gene, nrow = 2, scales = 'fixed', dir= 'h') +
+  scale_color_manual(values = data_color$Cluster_early) +
+  theme(legend.position = 'bottom') +
+  labs(x = "Pseudotime order") +
+  ylim(c(0,8))
+#ggsave(filename = "./190830_mHEC_files/Pattern_genes.select2.pdf", width = 8, height = 3.5)
+
+```
+
+## save
+```{r early_save, eval = T}
+save(ep_early, ep_early_pt, cds_pt_early, genes.aov.early.annot.sig, top500_km, top500.genes,
+     comres_bp, comres_kegg, 
+     #gsva_res, gsva_sig, 
+     regSet.sig.names.tf, pattern_colors, data_color, 
+      file = "190830_mHEC_data/seurat.ep_early.ep_early_pt.cds.aov.comres.gsva.Rdata")
+```
